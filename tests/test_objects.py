@@ -70,6 +70,66 @@ class FakeCamera:
 
 
 class ObjectTests(unittest.TestCase):
+    def test_rename_and_delete_labels_update_annotations_and_preserve_photos(self):
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+        import copy
+        from PySide6.QtWidgets import QApplication, QMessageBox
+        from aula_ia.object_desktop import ObjectWindow
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as folder:
+            window = ObjectWindow()
+            window.project = object_fixture(folder)
+            window.path = Path(folder)/'proyecto.json'
+            window.project['classes'].append('Otra')
+            rows = window.project['images']
+            rows[0]['boxes'].append([80, 10, 100, 30])
+            rows[0]['box_labels'].append('Otra')
+            window.refresh()
+            paths = [r['path'] for r in rows]
+            boxes = copy.deepcopy([r['boxes'] for r in rows])
+            window.package = Path(folder)/'modelo-anterior.zip'
+            window.undo_boxes[0] = [(copy.deepcopy(rows[0]['boxes']), ['objeto', 'Otra'], True)]
+            with patch('aula_ia.object_desktop.QInputDialog.getText', return_value=('Célula', True)):
+                window.rename_class()
+            self.assertEqual(window.project['classes'], ['Célula', 'Otra'])
+            self.assertEqual(window.class_choice.currentText(), 'Célula')
+            self.assertTrue(all('Célula' in r['box_labels'] for r in rows))
+            self.assertEqual(boxes, [r['boxes'] for r in rows])
+            self.assertTrue(all(r['reviewed'] for r in rows))
+            self.assertIsNone(window.package)
+            self.assertFalse(window.undo_boxes)
+            self.assertIn('Célula', window.canvas.box_labels)
+            for name in ('Otra', ''):
+                with patch('aula_ia.object_desktop.QInputDialog.getText', return_value=(name, True)), \
+                        patch.object(window, 'error') as error:
+                    window.rename_class()
+                    error.assert_called_once()
+                self.assertEqual(window.project['classes'], ['Célula', 'Otra'])
+            before = copy.deepcopy(window.project)
+            with patch('aula_ia.object_desktop.QMessageBox.question', return_value=QMessageBox.StandardButton.No):
+                window.delete_class()
+            self.assertEqual(before, window.project)
+            with patch('aula_ia.object_desktop.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes) as question:
+                window.delete_class()
+                self.assertIn('9 rectángulos', question.call_args.args[2])
+            self.assertEqual(window.project['classes'], ['Otra'])
+            self.assertEqual([r['path'] for r in rows], paths)
+            self.assertEqual(rows[0]['boxes'], [[80, 10, 100, 30]])
+            self.assertEqual(rows[0]['box_labels'], ['Otra'])
+            self.assertTrue(all(not r['reviewed'] for r in rows))
+            self.assertTrue(all(not r['boxes'] for r in rows[1:]))
+            saved = json.loads(window.path.read_text(encoding='utf-8'))
+            self.assertEqual(saved['classes'], ['Otra'])
+            self.assertEqual(saved['images'][0]['box_labels'], ['Otra'])
+            with patch('aula_ia.object_desktop.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
+                window.delete_class()
+            self.assertEqual(window.project['classes'], [])
+            self.assertEqual(window.class_choice.count(), 0)
+            self.assertEqual(window.canvas.current_label, '')
+            self.assertTrue(all(not r['boxes'] for r in rows))
+            window.close()
+        app.processEvents()
+
     def test_bulk_partition_with_ctrl_shift_selection_and_checkboxes(self):
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
         import copy

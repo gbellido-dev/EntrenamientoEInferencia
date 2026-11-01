@@ -25,7 +25,7 @@ Abre **`iniciar_objetos.cmd`**. Es la única versión de la aplicación.
 2. **Añadir fotos:** selecciona una carpeta y asigna el grupo de captura. No se modifican los originales.
 3. **Elegir clase:** en «Clase del rectángulo», selecciona qué objeto vas a marcar.
 4. **Dibujar:** arrastra un rectángulo ajustado alrededor del objeto. Repite con todos los objetos de las clases del proyecto.
-5. **Corregir:** clic para seleccionar un rectángulo; elige otra clase y pulsa «Aplicar al seleccionado». Supr borra la caja. Para cambiar su tamaño, bórrala y dibuja otra. «Deshacer rectángulos» recupera el estado anterior durante la sesión.
+5. **Corregir:** clic para seleccionar un rectángulo; elige otra clase y pulsa «Cambiar etiqueta del rectángulo». «Borrar rectángulo» o Supr borra la caja. Para cambiar su tamaño, bórrala y dibuja otra. «Deshacer» recupera el estado anterior durante la sesión. «Renombrar» cambia el nombre de una etiqueta en todo el proyecto; «Eliminar etiqueta» pide confirmar si se borrarán sus rectángulos y conserva las fotografías para revisarlas de nuevo. Renombrar o eliminar etiquetas limpia el historial de deshacer y requiere entrenar un modelo nuevo.
 6. **Revisar:** confirma la revisión. Para una imagen sin ninguno de los objetos de tus clases, usa «Confirmar sin objetos». No dibujes cajas de fondo.
 7. **Entrenar y evaluar:** revisa los grupos y ajusta épocas y tasa. El proceso se ejecuta en segundo plano y permite cancelar.
 8. **Exportar:** copia `detector-objetos.zip` y cárgalo en la web de la Pi.

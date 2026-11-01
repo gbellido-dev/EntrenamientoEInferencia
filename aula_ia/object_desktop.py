@@ -853,12 +853,14 @@ class ObjectWindow(QMainWindow):
         self.class_choice.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.class_choice.currentTextChanged.connect(self._on_class_changed)
         class_bar.addWidget(self.class_choice)
-        btn_add_class = self._make_button('＋ Etiqueta', self.add_class)
-        btn_relabel = self._make_button('✏ Reetiqueta', self.canvas_relabel)
-        btn_add_class.setFixedHeight(30)
-        btn_relabel.setFixedHeight(30)
-        class_bar.addWidget(btn_add_class)
-        class_bar.addWidget(btn_relabel)
+        btn_add_class = self._make_button('＋ Añadir etiqueta', self.add_class)
+        self.rename_class_button = self._make_button('Renombrar', self.rename_class)
+        self.delete_class_button = self._make_button('Eliminar etiqueta', self.delete_class)
+        self.rename_class_button.setToolTip('Cambiar el nombre de esta etiqueta en todo el proyecto.')
+        self.delete_class_button.setToolTip('Eliminar esta etiqueta del proyecto y sus rectángulos, previa confirmación.')
+        for button in (btn_add_class, self.rename_class_button, self.delete_class_button):
+            button.setFixedHeight(30)
+            class_bar.addWidget(button)
         detail.addLayout(class_bar)
 
         # Auto-avance
@@ -908,10 +910,12 @@ class ObjectWindow(QMainWindow):
         # Botones de acción
         actions = QHBoxLayout()
         actions.setSpacing(4)
-        btn_del = self._make_button('🗑 Borrar', self.canvas_delete)
+        btn_del = self._make_button('🗑 Borrar rectángulo', self.canvas_delete)
+        btn_relabel = self._make_button('Cambiar etiqueta del rectángulo', self.canvas_relabel)
+        btn_relabel.setToolTip('Selecciona un rectángulo, elige su nueva etiqueta arriba y pulsa este botón.')
         btn_undo = self._make_button('↩ Deshacer', self.undo)
         btn_empty = self._make_button('☑ Sin objetos', self.mark_empty)
-        for b in (btn_del, btn_undo, btn_empty):
+        for b in (btn_relabel, btn_del, btn_undo, btn_empty):
             b.setFixedHeight(30)
             actions.addWidget(b)
         detail.addLayout(actions)
@@ -945,6 +949,8 @@ class ObjectWindow(QMainWindow):
         self.canvas.delete_selected()
 
     def canvas_relabel(self):
+        if self.canvas.selected < 0 or not self.canvas.current_label:
+            return self.error('Selecciona un rectángulo, elige su nueva etiqueta y pulsa «Cambiar etiqueta del rectángulo».')
         self.canvas.relabel_selected()
 
     def select_photos(self):
@@ -1652,6 +1658,76 @@ class ObjectWindow(QMainWindow):
         self.save()
         self.test_result.setText('Clases modificadas. Entrena un modelo nuevo para incluir la nueva clase.')
 
+    def rename_class(self):
+        old = self.class_choice.currentText()
+        if not self.project or old not in self.project['classes']:
+            return self.error('Selecciona la etiqueta que quieres renombrar.')
+        name, ok = QInputDialog.getText(self, 'Renombrar etiqueta', 'Nuevo nombre:', text=old)
+        name = name.strip()
+        if not ok or name == old:
+            return
+        if not name or len(name) > 80 or name in self.project['classes']:
+            return self.error('Usa un nombre distinto, no vacío, de hasta 80 caracteres.')
+        index = self.project['classes'].index(old)
+        self.project['classes'][index] = name
+        for row in self.project['images']:
+            row['box_labels'] = [name if label == old else label for label in row['box_labels']]
+        self._refresh_after_label_change(name)
+
+    def delete_class(self):
+        label = self.class_choice.currentText()
+        if not self.project or label not in self.project['classes']:
+            return self.error('Selecciona la etiqueta que quieres eliminar.')
+        affected = [row for row in self.project['images'] if label in row['box_labels']]
+        count = sum(row['box_labels'].count(label) for row in affected)
+        if count:
+            answer = QMessageBox.question(
+                self, 'Eliminar etiqueta',
+                f'Eliminar «{label}» borrará {count} rectángulos de {len(affected)} fotos. '
+                'Las fotos se conservarán y quedarán pendientes de revisión. '
+                'Esta operación no se puede deshacer. ¿Eliminar la etiqueta y sus rectángulos?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.project['classes'].remove(label)
+        for row in affected:
+            remaining = [(box, value) for box, value in zip(row['boxes'], row['box_labels']) if value != label]
+            row['boxes'] = [box for box, _ in remaining]
+            row['box_labels'] = [value for _, value in remaining]
+            row['reviewed'] = False
+        selected = self.project['classes'][0] if self.project['classes'] else ''
+        self._refresh_after_label_change(selected)
+
+    def _refresh_after_label_change(self, selected):
+        self.package = None
+        # Los historiales previos contienen nombres que ya no pertenecen al proyecto.
+        self.undo_boxes.clear()
+        self.class_choice.blockSignals(True)
+        self.class_choice.clear()
+        self.class_choice.addItems(self.project['classes'])
+        if selected:
+            self.class_choice.setCurrentText(selected)
+        self.class_choice.blockSignals(False)
+        self._on_class_changed(selected)
+        self._model_name_lbl.setText('Entrena de nuevo')
+        self._model_labels_lbl.setText(' · '.join(self.project['classes']))
+        self.test_result.setText('Etiquetas modificadas. Entrena un modelo nuevo para aplicar los cambios.')
+        self.images.blockSignals(True)
+        for index, row in enumerate(self.project['images']):
+            item = self.images.item(index)
+            if item:
+                item.setText(self.row_text(row))
+                item.setForeground(self._row_color(row))
+        self.images.blockSignals(False)
+        if self.valid():
+            self.select(self.current, inherit_partition=False)
+            self.update_row()
+        else:
+            self.save()
+        self.statusBar().showMessage('Etiquetas actualizadas. Entrena de nuevo el detector.', 5000)
+
     def mark_reviewed(self):
         if self.valid():
             self.project['images'][self.current]['reviewed'] = True
@@ -1932,7 +2008,7 @@ class ObjectWindow(QMainWindow):
 OBJECT_HELP = '''<h1>Enseñar a localizar y etiquetar objetos</h1>
 <p>Elige qué quieres detectar: caras, pelotas, células u otras clases que puedas marcar con rectángulos. Una imagen puede tener cero, uno o varios objetos, incluso de clases distintas.</p>
 <h2>El recorrido</h2><ol><li>Crea un proyecto vacío y añade tus propias etiquetas.</li><li>Añade fotografías originales.</li><li>Selecciona una clase y dibuja un rectángulo ajustado alrededor de cada objeto de esa clase.</li><li>Repite con todos los objetos de las clases del proyecto. Confirma la revisión o marca la imagen «sin objetos».</li><li>Revisa los grupos, entrena y evalúa.</li><li>Exporta el ZIP y úsalo con imágenes nuevas o la cámara en la Raspberry Pi.</li></ol>
-<h2>Corregir etiquetas</h2><p>Haz clic en un rectángulo, elige otra clase y pulsa «Aplicar al seleccionado». Para corregir su tamaño, bórralo con Supr y dibújalo de nuevo. Puedes deshacer cambios durante la sesión. «Añadir etiqueta» amplía el proyecto; después debes entrenar un modelo nuevo.</p>
+<h2>Corregir etiquetas</h2><p>«Añadir etiqueta» crea una clase. «Renombrar» cambia el nombre de la etiqueta elegida en todas las fotos. «Eliminar etiqueta» la elimina; si tiene rectángulos, pide confirmar cuántos se borrarán, conserva las fotos y las deja pendientes de revisión. Estos cambios requieren entrenar de nuevo. Para corregir un solo rectángulo, selecciónalo, elige otra clase y pulsa «Cambiar etiqueta del rectángulo». «Borrar rectángulo» o Supr elimina solo el seleccionado. Para cambiar su tamaño, bórralo y dibújalo de nuevo. Puedes deshacer cambios de rectángulos durante la sesión; renombrar o eliminar clases limpia ese historial.</p>
 <h2>Qué aprende</h2><p>El modelo aprende las clases y las ubicaciones que le enseñas; no reconoce automáticamente cualquier objeto posible. Reutilizamos un extractor visual SSDLite MobileNetV3 y entrenamos las cabezas de clasificación y coordenadas. El fondo es interno: no debes dibujar rectángulos de fondo.</p>
 <h2>Evaluar sin engañarnos</h2><p>Mantén las fotos de una misma sesión, objeto, persona o muestra microscópica en un grupo. No repartas fotos casi iguales entre entrenamiento y prueba. Cada clase necesita ejemplos de varios grupos y todos sus objetos visibles deben estar anotados.</p>
 <p>Precisión: de los rectángulos predichos, cuántos tienen clase y posición correctas. Recuperación: de los objetos reales, cuántos encontró. IoU mide el solapamiento. AP50 se calcula por clase con IoU mínimo 0,5; se muestra también su media entre clases.</p>

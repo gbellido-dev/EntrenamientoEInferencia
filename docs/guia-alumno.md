@@ -27,6 +27,12 @@ Una foto sin revisar no es lo mismo que una foto revisada sin objetos. Las fotos
 
 Los ejemplos de la demostración son opcionales y pertenecen a otro proyecto. No necesitas incluir sus etiquetas ni sus imágenes en tu trabajo.
 
+## Editar etiquetas y rectángulos
+
+Arriba del editor, «Añadir etiqueta» crea una clase, «Renombrar» cambia su nombre en todas las fotografías y «Eliminar etiqueta» la elimina del proyecto. Si la etiqueta tiene rectángulos, se indica cuántos se borrarán y se pide confirmación. Las fotos se conservan y vuelven a quedar pendientes de revisión. Tras cambiar etiquetas debes entrenar de nuevo; el modelo anterior no se actualiza por sí solo.
+
+Para cambiar únicamente la clase de un rectángulo, selecciónalo, elige la etiqueta correcta y pulsa «Cambiar etiqueta del rectángulo». «Borrar rectángulo» elimina solo el recuadro seleccionado. Los cambios de rectángulos se pueden deshacer durante la sesión; renombrar o eliminar etiquetas limpia ese historial.
+
 ## Mientras se entrena
 
 Al pulsar «Entrenar y exportar», verás «Entrenando», el tiempo transcurrido y la tarea actual. La barra se anima durante la preparación; después muestra las épocas y el registro indica los lotes de imágenes procesados. La primera carga puede tardar porque prepara PyTorch y descarga los pesos si faltan. Puedes solicitar la cancelación; se completará la operación en curso antes de detenerse. Al final se indica «Completado», «Cancelado» o «Error».
