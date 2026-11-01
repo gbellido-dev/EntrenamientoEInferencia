@@ -840,6 +840,10 @@ class ObjectWindow(QMainWindow):
         self.partition_combo = QComboBox()
         self.partition_combo.addItems(['Automático / Otro', '🔵 Train', '🟡 Val', '🟣 Test'])
         self.partition_combo.setFixedWidth(130)
+        self.partition_combo.setToolTip(
+            'La última elección se aplica a las siguientes fotos sin conjunto asignado. '
+            'Las fotos ya asignadas conservan su conjunto.'
+        )
         self.partition_combo.currentIndexChanged.connect(self._on_image_partition_changed)
         info_row.addWidget(self.partition_combo)
 
@@ -940,8 +944,7 @@ class ObjectWindow(QMainWindow):
                     if self._current_partition != 'all' and self._detect_partition(row['group']) != self._current_partition:
                         self.partition_tabs.setCurrentIndex(0)
                     self.images.setCurrentRow(index)
-                    if self.current != index:
-                        self.select(index)
+                    self.select(index)
                     break
             self.statusBar().showMessage(f'{added} fotos añadidas; la fotografía seleccionada está lista para anotar.', 4000)
         except Exception as error:
@@ -1311,7 +1314,9 @@ class ObjectWindow(QMainWindow):
         """Asigna prefijo de grupo según el combo de partición."""
         if self._updating_lists or not self.valid():
             return
+        self.project['preferred_partition'] = combo_idx
         row = self.project['images'][self.current]
+        row['partition_assigned'] = True
         curr_g = row.get('group', '')
         # Quitar prefijos anteriores si los tenía
         clean_g = curr_g
@@ -1442,10 +1447,13 @@ class ObjectWindow(QMainWindow):
         self.group.clear()
         self._refresh_sublists()
         if self.project['images']:
+            self.images.blockSignals(True)
             self.images.setCurrentRow(0)
+            self.images.blockSignals(False)
+            self.select(0, inherit_partition=False)
         self._update_status()
 
-    def select(self, index: int):
+    def select(self, index: int, inherit_partition: bool = True):
         self.current = index
         if not self.valid():
             return
@@ -1464,6 +1472,11 @@ class ObjectWindow(QMainWindow):
         self.excluded.blockSignals(True)
         self.excluded.setChecked(row.get('excluded', False))
         self.excluded.blockSignals(False)
+        preferred = self.project.get('preferred_partition')
+        if (inherit_partition and preferred in (0, 1, 2, 3)
+                and not row.get('partition_assigned')
+                and self._detect_partition(row.get('group', '')) == 'other'):
+            self._on_image_partition_changed(preferred)
         self._sync_active_list_selection()
         self._update_status()
 

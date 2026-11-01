@@ -70,6 +70,60 @@ class FakeCamera:
 
 
 class ObjectTests(unittest.TestCase):
+    def test_partition_choice_follows_new_images_without_overwriting_assignments(self):
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+        from PySide6.QtWidgets import QApplication
+        from aula_ia.object_desktop import ObjectWindow
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            window = ObjectWindow()
+            window.project = object_fixture(folder)
+            window.path = folder/'proyecto.json'
+            rows = window.project['images']
+            rows[3]['group'] = 'test-reservado'
+            window.refresh()
+            window.partition_combo.setCurrentIndex(1)
+            window.move(1)
+            self.assertEqual(window.partition_combo.currentIndex(), 1)
+            self.assertTrue(rows[1]['group'].startswith('train-'))
+            window.auto_next.setChecked(True)
+            window.update_boxes({'boxes': [[20, 15, 70, 65]], 'box_labels': ['objeto'], 'added': True})
+            self.assertEqual(window.current, 2)
+            self.assertEqual(window.partition_combo.currentIndex(), 1)
+            window.partition_combo.setCurrentIndex(2)
+            window.move(1)
+            self.assertEqual(window.partition_combo.currentIndex(), 3)
+            self.assertEqual(rows[3]['group'], 'test-reservado')
+            window.move(1)
+            self.assertEqual(window.partition_combo.currentIndex(), 2)
+            self.assertTrue(rows[4]['group'].startswith('val-'))
+            window.partition_combo.setCurrentIndex(0)
+            automatic_group = rows[4]['group']
+            window.select(1)
+            self.assertEqual(window.partition_combo.currentIndex(), 1)
+            self.assertEqual(window.project['preferred_partition'], 0)
+            window.partition_combo.setCurrentIndex(2)
+            window.select(4)
+            self.assertEqual(window.partition_combo.currentIndex(), 0)
+            self.assertEqual(rows[4]['group'], automatic_group)
+            window.load_path(window.path)
+            window.select(5)
+            self.assertEqual(window.partition_combo.currentIndex(), 2)
+            self.assertTrue(window.project['images'][5]['group'].startswith('val-'))
+            unvisited = window.project['images'][6]['group']
+            new_photo = folder/'nueva.png'
+            Image.new('RGB', (80, 80), 'yellow').save(new_photo)
+            window.import_photos([str(new_photo)])
+            self.assertEqual(window.partition_combo.currentIndex(), 2)
+            self.assertTrue(window.project['images'][-1]['group'].startswith('val-'))
+            self.assertEqual(window.project['images'][6]['group'], unvisited)
+            saved = json.loads(window.path.read_text(encoding='utf-8'))
+            self.assertEqual(saved['preferred_partition'], 2)
+            self.assertTrue(saved['images'][-1]['partition_assigned'])
+            window.close()
+        app.processEvents()
+
     def test_training_stays_responsive_during_loading_and_reports_outcome(self):
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
         import builtins

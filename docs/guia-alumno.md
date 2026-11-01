@@ -19,6 +19,8 @@ Una etiqueta es el nombre de un tipo de objeto. Un rectángulo indica dónde est
 
 También puedes pulsar el área vacía del editor para seleccionar una o varias fotos, o arrastrarlas sobre ella. Si todavía no hay proyecto, se pedirá dónde guardarlo. Solo se importan los archivos elegidos; volver a seleccionar una foto existente conserva sus anotaciones.
 
+El selector «Conjunto» recuerda tu última elección para las siguientes fotos sin asignar, también al avanzar automáticamente después de dibujar un rectángulo. Las fotos que ya tienen conjunto conservan su valor; verlas no cambia tu última elección. Si eliges «Automático / Otro» expresamente para una foto, esa elección también se conserva. La preferencia se guarda con el proyecto.
+
 Una foto sin revisar no es lo mismo que una foto revisada sin objetos. Las fotos pendientes se omiten para no dar respuestas incorrectas al modelo.
 
 Los ejemplos de la demostración son opcionales y pertenecen a otro proyecto. No necesitas incluir sus etiquetas ni sus imágenes en tu trabajo.
