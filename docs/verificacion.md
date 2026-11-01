@@ -2,7 +2,9 @@
 
 Entorno: Windows, Python 3.12.14. Las versiones instaladas están registradas en `requirements-windows.lock.txt`.
 
-La batería de **23 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas, la selección de fotos desde el área vacía, la respuesta de la ventana durante una carga lenta del entrenamiento y el instalador de Raspberry Pi. También se comprueban los estados de éxito, error y cancelación del entrenamiento, que el conjunto elegido se mantenga al pasar a fotos sin asignar, el cambio de conjunto de varias fotos mediante casillas, Ctrl+clic y Shift+clic, y el renombrado y eliminación de etiquetas conservando las fotografías y las anotaciones de otras clases. Se han retirado las versiones anteriores y sus dependencias internas.
+La batería de **26 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas, la selección de fotos desde el área vacía, la respuesta de la ventana durante una carga lenta del entrenamiento y el instalador de Raspberry Pi. También se comprueban los estados de éxito, error y cancelación del entrenamiento, que el conjunto elegido se mantenga al pasar a fotos sin asignar, el cambio de conjunto de varias fotos mediante casillas, Ctrl+clic y Shift+clic, y el renombrado y eliminación de etiquetas conservando las fotografías y las anotaciones de otras clases. Las pruebas de Kaggle cubren enlaces e identificadores genéricos, versiones, inventario y descarga simulada en un proceso real con éxito, tablas sin imágenes, error, cancelación y ocultación del token en el registro. Se han retirado las versiones anteriores y sus dependencias internas.
+
+Se ha comprobado además una descarga real de `vivek468/superstore-dataset-final` con kagglehub 1.0.3: contiene un CSV y ninguna imagen. Se guarda solo como prueba local, fuera de Git y de los proyectos de entrenamiento. No se ha comprobado el acceso a datasets privados con una cuenta real.
 
 ## Comprobaciones
 

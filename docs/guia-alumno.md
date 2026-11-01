@@ -27,6 +27,14 @@ Una foto sin revisar no es lo mismo que una foto revisada sin objetos. Las fotos
 
 Los ejemplos de la demostración son opcionales y pertenecen a otro proyecto. No necesitas incluir sus etiquetas ni sus imágenes en tu trabajo.
 
+## Descargar ejemplos desde Kaggle
+
+Pulsa «Descargar de Kaggle…» y pega la dirección de un dataset o su identificador `propietario/dataset`. Elige la carpeta base y descarga. Puedes usar cualquier dataset; la herramienta no presupone caras, células ni otras clases. También admite `/versions/N` para repetir una práctica con la misma versión de datos.
+
+El registro muestra la transferencia y la extracción; el tiempo y la barra animada indican que sigue trabajando. Al acabar verás cuántos archivos e imágenes hay. «Abrir carpeta descargada» permite verlos. Si contiene fotos compatibles, «Añadir imágenes al proyecto…» permite elegir la subcarpeta y su grupo. Revisa después las sesiones y los objetos relacionados; las etiquetas externas no se convierten automáticamente. Un conjunto de tablas CSV se puede descargar, pero no sirve directamente para entrenar este detector de imágenes.
+
+Muchos datasets públicos se descargan sin token. Si Kaggle exige acceso, pulsa «Obtener token en Kaggle» y pégalo en el campo opcional. Se usa solo para esa descarga, no se guarda con el proyecto. Si hay condiciones que aceptar, debes hacerlo en la web del dataset. Al cancelar pueden quedar archivos parciales; revisa la carpeta o vuelve a intentarlo.
+
 ## Editar etiquetas y rectángulos
 
 Arriba del editor, «Añadir etiqueta» crea una clase, «Renombrar» cambia su nombre en todas las fotografías y «Eliminar etiqueta» la elimina del proyecto. Si la etiqueta tiene rectángulos, se indica cuántos se borrarán y se pide confirmación. Las fotos se conservan y vuelven a quedar pendientes de revisión. Tras cambiar etiquetas debes entrenar de nuevo; el modelo anterior no se actualiza por sí solo.

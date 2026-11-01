@@ -9,6 +9,7 @@ import csv
 import json
 import os
 from pathlib import Path
+from aula_ia.kaggle import dataset_destination, normalize_handle
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
@@ -25,10 +26,12 @@ def inspect_dataset(folder):
     for path in sorted(folder.rglob('*')):
         if not path.is_file():
             continue
+        relative = path.relative_to(folder)
+        if relative.parts[0] == '.complete':
+            continue  # Marcadores de caché de kagglehub, no archivos del dataset.
         extension = path.suffix.lower() or '(sin extensión)'
         counts[extension] += 1
         size += path.stat().st_size
-        relative = path.relative_to(folder)
         directories[str(relative.parent)] += 1
         examples.setdefault(extension, [])
         if len(examples[extension]) < 5:
@@ -40,7 +43,7 @@ def inspect_dataset(folder):
             item = {'file': relative}
             try:
                 # Limitar las lecturas: no cargar grandes tablas completas.
-                with path.open(encoding='utf-8-sig') as stream:
+                with path.open(encoding='utf-8-sig', errors='replace') as stream:
                     prefix = stream.read(32768)
                 if extension == '.csv':
                     item['columns'] = next(csv.reader(prefix.splitlines()), [])
@@ -78,11 +81,18 @@ def main():
     parser.add_argument('--handle',
                         help='owner/dataset o owner/dataset/versions/N para fijar una versión')
     parser.add_argument('--inspect-only', type=Path, help='Inspeccionar una descarga ya existente sin usar red')
+    parser.add_argument('--destination', type=Path, default=ROOT/'datasets',
+                        help='Carpeta base de descarga; se añaden propietario/dataset/versión')
     args = parser.parse_args()
+    if args.handle:
+        try:
+            args.handle = normalize_handle(args.handle)
+        except ValueError as error:
+            parser.error(str(error))
     if args.inspect_only:
         folder = args.inspect_only
     else:
-        if not args.handle or len(args.handle.split('/')) < 2:
+        if not args.handle:
             parser.error('Indica --handle propietario/conjunto o utiliza --inspect-only CARPETA.')
         # No se imprimen credenciales ni se configura autenticación de forma automática.
         os.environ.setdefault('KAGGLEHUB_CACHE', str(ROOT/'.cache'/'kagglehub'))
@@ -90,20 +100,22 @@ def main():
             import kagglehub
         except ImportError as error:
             raise SystemExit('Instala primero: python -m pip install -r requirements-datasets.txt') from error
-        slug = args.handle.split('/')[1]
-        destination = ROOT/'datasets'/slug
+        destination = dataset_destination(args.destination, args.handle)
         print(f'Descargando {args.handle} en {destination}', flush=True)
         folder = Path(kagglehub.dataset_download(args.handle, output_dir=str(destination)))
     report = inspect_dataset(folder)
     report['requested_handle'] = args.handle
-    reports = ROOT/'datasets'/'reports'
-    reports.mkdir(parents=True, exist_ok=True)
-    output = reports/'inventario-kaggle.json'
+    output = folder.parent/f'{folder.name}-inventario.json'
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps({key: report[key] for key in ('folder', 'file_count', 'image_count', 'bytes_unpacked', 'extensions', 'annotation_samples')},
                      ensure_ascii=True, indent=2))
     print(f'Inventario completo: {output}')
     print('No se ha entrenado ningún modelo ni convertido etiquetas.')
+    print('AULA_KAGGLE_RESULT:'+json.dumps({
+        'folder': str(folder.resolve()), 'inventory': str(output),
+        'file_count': report['file_count'], 'image_count': report['image_count'],
+        'bytes_unpacked': report['bytes_unpacked'], 'extensions': report['extensions'],
+    }, ensure_ascii=True), flush=True)
 
 
 if __name__ == '__main__':

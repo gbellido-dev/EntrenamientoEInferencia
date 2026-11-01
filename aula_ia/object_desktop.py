@@ -747,7 +747,8 @@ class ObjectWindow(QMainWindow):
         btn_open = self._make_button('📂 Abrir', self.open_project)
         btn_import = self._make_button('📥 Importar CVAT', self.import_xml)
         btn_add = self._make_button('🖼 Añadir fotos', self.add_images)
-        for btn in (btn_new, btn_open, btn_import, btn_add):
+        self.kaggle_button = self._make_button('Descargar de Kaggle…', self.download_kaggle)
+        for btn in (btn_new, btn_open, btn_import, btn_add, self.kaggle_button):
             btn.setFixedHeight(34)
             toolbar_row.addWidget(btn)
         toolbar_row.addStretch()
@@ -1276,6 +1277,27 @@ class ObjectWindow(QMainWindow):
                 self.refresh()
         except Exception as error:
             self.error(error)
+
+    def download_kaggle(self):
+        from aula_ia.kaggle_desktop import KaggleDownloadDialog
+        dialog = KaggleDownloadDialog(self)
+        dialog.images_requested.connect(self._import_downloaded_images)
+        dialog.exec()
+
+    def _import_downloaded_images(self, download_folder):
+        folder = QFileDialog.getExistingDirectory(
+            self, 'Elige la carpeta de imágenes que quieres añadir', download_folder)
+        if not folder:
+            return
+        if not self.project:
+            self.new_project()
+            if not self.project:
+                return
+        group, ok = QInputDialog.getText(
+            self, 'Grupo de las fotografías',
+            'Grupo o sesión (revisa después qué fotos están relacionadas):', text='kaggle-1')
+        if ok and group.strip():
+            self._import_folder_into_group(folder, group.strip())
 
     def add_images_partition(self, partition: str = 'train'):
         """Añade imágenes asignándolas a un grupo prefijado de entrenamiento, validación o test."""

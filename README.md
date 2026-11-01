@@ -79,14 +79,20 @@ Puedes importar un CVAT XML desde el editor o convertirlo por terminal:
 
 El importador conserva las etiquetas que ya tienen sus rectángulos; no las añade a otros proyectos. Revisa el reparto de grupos antes de evaluar. El comando rechaza un destino existente para conservar las correcciones previas.
 
-Descarga opcional desde Kaggle:
+En Windows, **«Descargar de Kaggle…»** abre el asistente genérico de descarga. Pega un enlace de dataset o `propietario/dataset` (también `propietario/dataset/versions/N`), elige la carpeta base y pulsa **«Descargar dataset»**. No viene ligado a ningún conjunto ni clase. Muestra actividad, registro de transferencia y cancelación; al terminar muestra el número de archivos, imágenes y tamaño. Puedes abrir la carpeta o añadir sus imágenes al proyecto. Descargar no convierte las anotaciones de Kaggle ni crea etiquetas automáticamente.
+
+Se usa [kagglehub oficial](https://github.com/Kaggle/kagglehub). Para datasets que requieren acceso, el asistente permite un token opcional: se pasa solo al proceso de descarga, sin guardarlo en el proyecto ni en archivos. También se puede usar la autenticación ya configurada en el equipo. Kaggle puede exigir aceptar condiciones o permisos en su web. Si faltan dependencias en una instalación anterior, ejecuta de nuevo `instalar_windows.cmd`.
+
+La misma descarga está disponible por terminal:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-datasets.txt
 .\.venv\Scripts\python.exe -m scripts.descargar_kaggle --handle propietario/conjunto
+# Otra carpeta base (opcional):
+.\.venv\Scripts\python.exe -m scripts.descargar_kaggle --handle propietario/conjunto --destination "D:\Mis datasets"
 ```
 
-Se guarda en `datasets/` y se genera un inventario. El código, los tests y la documentación se versionan en Git; datasets, pesos, modelos exportados, proyectos locales, credenciales y entornos virtuales quedan excluidos. El conjunto de Kaggle descargado previamente permanece local como material opcional.
+Por defecto se guarda en `datasets/propietario/conjunto/latest/` (o `version-N/`) y se genera un inventario JSON junto a esa carpeta. Datasets de distintos propietarios quedan separados. Si cancelas, pueden quedar archivos parciales para revisar o reintentar. El código, los tests y la documentación se versionan en Git; datasets, pesos, modelos exportados, proyectos locales, credenciales y entornos virtuales quedan excluidos. El conjunto de Kaggle descargado previamente permanece local como material opcional.
 
 ## Entrenar por terminal
 
