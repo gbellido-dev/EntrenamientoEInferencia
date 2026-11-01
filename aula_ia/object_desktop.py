@@ -107,7 +107,7 @@ class BoxCanvas(QWidget):
             self.boxes.append(box)
             self.box_labels.append(self.current_label)
             self.selected = len(self.boxes)-1
-            self.emit_annotations()
+            self.emit_annotations(added=True)
         else:
             candidates = [(index, (item[2]-item[0])*(item[3]-item[1])) for index, item in enumerate(self.boxes)
                           if item[0] <= a[0] <= item[2] and item[1] <= a[1] <= item[3]]
@@ -122,8 +122,8 @@ class BoxCanvas(QWidget):
             self.emit_annotations()
             self.update()
 
-    def emit_annotations(self):
-        self.changed.emit({'boxes': copy.deepcopy(self.boxes), 'box_labels': self.box_labels.copy()})
+    def emit_annotations(self, added=False):
+        self.changed.emit({'boxes': copy.deepcopy(self.boxes), 'box_labels': self.box_labels.copy(), 'added': added})
 
     def relabel_selected(self):
         if self.editable and 0 <= self.selected < len(self.boxes):
@@ -201,6 +201,9 @@ class ObjectWindow(QMainWindow):
         self.button(class_bar, 'Añadir etiqueta', self.add_class)
         self.button(class_bar, 'Aplicar al seleccionado', self.canvas.relabel_selected)
         detail.addLayout(class_bar)
+        self.auto_next = QCheckBox('Pasar a la siguiente imagen al dibujar un rectángulo')
+        self.auto_next.setToolTip('Útil para fotos con un solo objeto. Guarda antes de avanzar; desactívalo para marcar varios objetos.')
+        detail.addWidget(self.auto_next)
         detail.addWidget(self.canvas, 1)
         self.filename = QLabel('')
         self.filename.setWordWrap(True)
@@ -402,8 +405,10 @@ class ObjectWindow(QMainWindow):
         self.filename.setText(f'{self.current+1}/{len(self.project["images"])} · {row["path"]} · {len(row["boxes"])} objetos')
         try:
             self.save()
+            return True
         except Exception as error:
             self.error(error)
+            return False
 
     def update_boxes(self, boxes):
         if self.valid():
@@ -414,7 +419,9 @@ class ObjectWindow(QMainWindow):
             else:
                 row['boxes'], row['box_labels'] = boxes, [self.canvas.current_label]*len(boxes)
             row['reviewed'] = True
-            self.update_row()
+            saved = self.update_row()
+            if saved and isinstance(boxes, dict) and boxes.get('added') and self.auto_next.isChecked():
+                self.move(1)
 
     def undo(self):
         if self.valid() and self.undo_boxes.get(self.current):

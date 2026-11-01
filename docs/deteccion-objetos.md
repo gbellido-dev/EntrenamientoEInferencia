@@ -32,6 +32,8 @@ Abre **`iniciar_objetos.cmd`**. Es la única versión de la aplicación.
 
 Cada rectángulo tiene su propia etiqueta; cambiar el selector solo afecta a las cajas nuevas. Para modificar una existente debes seleccionarla y aplicar la etiqueta. «Añadir etiqueta» amplía el proyecto y requiere entrenar un modelo nuevo para aprenderla.
 
+Para fotos con un solo objeto, activa **«Pasar a la siguiente imagen al dibujar un rectángulo»**. Se guarda la anotación y se avanza al terminar de dibujar. La casilla empieza desactivada para permitir varias cajas en una misma foto. Cambiar etiquetas, seleccionar o borrar cajas no provoca el avance; tampoco se avanza si falla el guardado.
+
 Las fotografías nuevas quedan pendientes hasta anotarlas o confirmar su revisión. Una imagen pendiente y vacía no equivale a una imagen negativa revisada. Las cajas, sus etiquetas y los descartes se guardan automáticamente.
 
 ## Ejemplo preparado
