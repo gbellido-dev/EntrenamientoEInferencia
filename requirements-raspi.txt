@@ -1,0 +1,7 @@
+# Python 3.11/3.12, Raspberry Pi OS de 64 bits. Rangos; validar y congelar para el aula.
+numpy>=1.24,<3
+Pillow>=10.4,<13
+onnxruntime>=1.20,<2
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+python-multipart>=0.0.18,<1

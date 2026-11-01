@@ -1,0 +1,2 @@
+# Herramientas opcionales de descarga; no necesarias en la Raspberry Pi.
+kagglehub>=1.0.2,<2

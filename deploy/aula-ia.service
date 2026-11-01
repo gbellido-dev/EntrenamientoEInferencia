@@ -1,0 +1,19 @@
+[Unit]
+Description=Aula IA - inferencia de imagenes
+After=network.target
+
+[Service]
+Type=simple
+# Sustituye alumno y las rutas por las de tu Raspberry Pi.
+User=alumno
+WorkingDirectory=/home/alumno/EntrenamientoEInferencia
+EnvironmentFile=/home/alumno/.config/aula-ia.env
+ExecStart=/home/alumno/EntrenamientoEInferencia/.venv/bin/python -m aula_ia.web --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
