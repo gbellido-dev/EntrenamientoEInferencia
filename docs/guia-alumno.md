@@ -12,16 +12,20 @@ Una etiqueta es el nombre de un tipo de objeto. Un rectángulo indica dónde est
 
 1. Recoge fotografías variadas del problema elegido.
 2. Importa las fotos y asigna un grupo a las que están relacionadas por sesión, objeto o muestra.
-
-También puedes pulsar el área vacía del editor para seleccionar una o varias fotos, o arrastrarlas sobre ella. Si todavía no hay proyecto, se pedirá dónde guardarlo. Solo se importan los archivos elegidos; volver a seleccionar una foto existente conserva sus anotaciones.
 3. Elige una etiqueta en el selector y arrastra una caja ajustada alrededor del objeto.
 4. Marca todos los objetos de las etiquetas del proyecto, no solo el más grande.
 5. Corrige las etiquetas y los rectángulos. Puedes borrar y deshacer.
 6. Confirma la revisión. Si no hay ninguno de tus objetos, usa «Confirmar sin objetos».
 
+También puedes pulsar el área vacía del editor para seleccionar una o varias fotos, o arrastrarlas sobre ella. Si todavía no hay proyecto, se pedirá dónde guardarlo. Solo se importan los archivos elegidos; volver a seleccionar una foto existente conserva sus anotaciones.
+
 Una foto sin revisar no es lo mismo que una foto revisada sin objetos. Las fotos pendientes se omiten para no dar respuestas incorrectas al modelo.
 
 Los ejemplos de la demostración son opcionales y pertenecen a otro proyecto. No necesitas incluir sus etiquetas ni sus imágenes en tu trabajo.
+
+## Mientras se entrena
+
+Al pulsar «Entrenar y exportar», verás «Entrenando», el tiempo transcurrido y la tarea actual. La barra se anima durante la preparación; después muestra las épocas y el registro indica los lotes de imágenes procesados. La primera carga puede tardar porque prepara PyTorch y descarga los pesos si faltan. Puedes solicitar la cancelación; se completará la operación en curso antes de detenerse. Al final se indica «Completado», «Cancelado» o «Error».
 
 ## Las palabras que necesitas
 

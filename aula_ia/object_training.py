@@ -172,6 +172,8 @@ def train_objects(project, output_dir, epochs=15, learning_rate=.001,
     history, best_ap, best_state = [], -1., None
     for epoch in range(epochs):
         check()
+        batches = (len(parts['train']) + 3) // 4
+        report(f'Época {epoch+1}/{epochs} · preparando {batches} lotes de imágenes…')
         model.train()
         model.backbone.eval()
         # BN congelada, incluso en las cabezas: evita estadísticas inestables
@@ -196,6 +198,9 @@ def train_objects(project, output_dir, epochs=15, learning_rate=.001,
             optimizer.step()
             total += loss.item()*len(batch)
             count += len(batch)
+            report(f'Época {epoch+1}/{epochs} · lote {start//4+1}/{batches} · '
+                   f'{count}/{len(order)} imágenes procesadas')
+        report(f'Época {epoch+1}/{epochs} · evaluando las imágenes de validación…')
         validation = evaluate(parts['val'])
         history.append({'epoch': epoch+1, 'loss': total/count, 'validation': validation})
         report(f'Época {epoch+1}/{epochs} · pérdida {total/count:.3f} · '
@@ -206,6 +211,7 @@ def train_objects(project, output_dir, epochs=15, learning_rate=.001,
     model.load_state_dict(best_state)
     model.eval()
     selected_epoch = max(history, key=lambda row: row['validation']['ap50'])['epoch']
+    report('Evaluando el detector elegido con las imágenes de prueba…')
     test = evaluate(parts['test'])
     metrics = {'task': project['task'], 'classes': classes, 'history': history, 'test_detection': test,
                'selected_epoch': selected_epoch, 'epochs': epochs, 'learning_rate': learning_rate, 'seed': 42,

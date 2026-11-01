@@ -22,9 +22,10 @@ import re
 from pathlib import Path
 import shutil
 import sys
+import time
 
 from PIL import Image
-from PySide6.QtCore import Qt, QRectF, QPointF, QSize, Signal, QMimeData
+from PySide6.QtCore import Qt, QRectF, QPointF, QSize, Signal, QMimeData, QTimer
 from PySide6.QtGui import (
     QColor, QImage, QPainter, QPen, QPixmap, QBrush, QFont,
     QShortcut, QKeySequence, QFontMetrics,
@@ -999,6 +1000,14 @@ class ObjectWindow(QMainWindow):
         self.train_progress.setFormat('En espera')
         layout.addWidget(self.train_progress)
 
+        self.train_status = QLabel('Listo para entrenar.')
+        self.train_status.setWordWrap(True)
+        self.train_status.setStyleSheet('color:#94a3b8; font-size:13px;')
+        layout.addWidget(self.train_status)
+        self._activity_timer = QTimer(self)
+        self._activity_timer.setInterval(1000)
+        self._activity_timer.timeout.connect(self._update_training_activity)
+
         # Log de entrenamiento
         self.report = QTextEdit()
         self.report.setReadOnly(True)
@@ -1553,24 +1562,58 @@ class ObjectWindow(QMainWindow):
 
     # ─── Worker / entrenamiento ──────────────────────────────
 
-    def run_worker(self, function, ready):
+    def run_worker(self, function, ready, training=False):
         if self.worker and self.worker.isRunning():
             return
         self.worker = Worker(function)
+        self._work_training = training
+        self._work_outcome = None
+        self._work_ready = ready
         self.worker.message.connect(self._on_training_message)
-        self.worker.failed.connect(self.error)
-        self.worker.result.connect(ready)
+        self.worker.failed.connect(self._on_work_failed)
+        self.worker.result.connect(self._on_work_result)
         self.worker.finished.connect(self.finished)
         self.editor.setEnabled(False)
         for btn in (self.train_button, self.test_button, self.model_button, self.export_button):
             btn.setEnabled(False)
         self.cancel_button.setEnabled(True)
-        self._update_status('Entrenando…')
+        self._update_status('Entrenando…' if training else 'Procesando…')
+        if training:
+            self._training_started = time.monotonic()
+            self._training_stage = 'Preparando el entrenamiento…'
+            self.train_button.setText('⏳ Entrenando…')
+            self.train_progress.setRange(0, 0)
+            self.epochs.setEnabled(False)
+            self.rate.setEnabled(False)
+            self._update_training_activity()
+            self._activity_timer.start()
         self.worker.start()
+
+    def _update_training_activity(self):
+        seconds = int(time.monotonic() - self._training_started)
+        self.train_status.setText(f'Entrenando · {seconds // 60:02d}:{seconds % 60:02d} · {self._training_stage}')
+
+    def _on_work_result(self, result):
+        try:
+            self._work_ready(result)
+            self._work_outcome = 'Completado'
+        except Exception as error:
+            self._on_work_failed(str(error))
+
+    def _on_work_failed(self, text):
+        cancelled = self.worker.stop.is_set()
+        self._work_outcome = 'Cancelado' if cancelled else 'Error'
+        self.report.append(str(text))
+        if not cancelled:
+            self.error(text)
 
     def _on_training_message(self, line: str):
         """Procesa líneas del worker; actualiza log y barra de progreso."""
         self.report.append(line)
+        if not self._work_training:
+            return
+        self._training_stage = line
+        self._update_training_activity()
         # Detectar "Época X/Y" o "Epoch X/Y" (en inglés) para actualizar la barra
         match = re.search(r'[Éé]poca?\s*(\d+)\s*/\s*(\d+)', line, re.IGNORECASE)
         if not match:
@@ -1579,7 +1622,8 @@ class ObjectWindow(QMainWindow):
             current_ep = int(match.group(1))
             total_ep = int(match.group(2))
             self.train_progress.setRange(0, total_ep)
-            self.train_progress.setValue(current_ep)
+            # Los mensajes de lotes describen una época todavía en curso.
+            self.train_progress.setValue(current_ep if 'pérdida' in line else current_ep - 1)
             self.train_progress.setFormat(f'Época {current_ep}/{total_ep}')
             self._sb_mode.setText(f'⏳ Entrenando… época {current_ep}/{total_ep}')
 
@@ -1588,16 +1632,29 @@ class ObjectWindow(QMainWindow):
         for btn in (self.train_button, self.test_button, self.model_button, self.export_button):
             btn.setEnabled(True)
         self.cancel_button.setEnabled(False)
-        self.train_progress.setFormat('Completado')
+        if self._work_training:
+            self._activity_timer.stop()
+            outcome = self._work_outcome or 'Interrumpido'
+            seconds = int(time.monotonic() - self._training_started)
+            self.train_status.setText(f'{outcome} · {seconds // 60:02d}:{seconds % 60:02d}')
+            self.train_progress.setRange(0, self.epochs.value())
+            if outcome == 'Completado':
+                self.train_progress.setValue(self.epochs.value())
+            else:
+                self.train_progress.setValue(0)
+            self.train_progress.setFormat(outcome)
+            self.train_button.setText('▶ Entrenar y exportar')
+            self.epochs.setEnabled(True)
+            self.rate.setEnabled(True)
         self._update_status('Edición')
 
     def start_train(self):
+        if self.worker and self.worker.isRunning():
+            return
         if not self.project:
             return self.error('Abre un proyecto de detección.')
         try:
             self.save()
-            detection_split(self.project)
-            from aula_ia.object_training import train_objects
             project = copy.deepcopy(self.project)
             output = self.path.parent / 'resultados'
             epochs, rate = self.epochs.value(), self.rate.value()
@@ -1606,6 +1663,15 @@ class ObjectWindow(QMainWindow):
             self.train_progress.setRange(0, epochs)
             self.train_progress.setFormat('Iniciando…')
 
+            def work(report, stop):
+                report('Comprobando imágenes, etiquetas y grupos…')
+                detection_split(project)
+                report('Cargando PyTorch y las herramientas de entrenamiento. El primer inicio puede tardar…')
+                from aula_ia.object_training import train_objects
+                if stop():
+                    raise ValueError('Entrenamiento cancelado antes de comenzar.')
+                return train_objects(project, output, epochs, rate, report, stop)
+
             def ready(result):
                 path, metrics = result
                 self.package = Path(path)
@@ -1613,8 +1679,7 @@ class ObjectWindow(QMainWindow):
                 self.show_metrics_card(metrics)
 
             self.run_worker(
-                lambda report, stop: train_objects(project, output, epochs, rate, report, stop),
-                ready,
+                work, ready, training=True,
             )
         except Exception as error:
             self.error(error)
@@ -1661,6 +1726,10 @@ class ObjectWindow(QMainWindow):
         if self.worker:
             self.worker.stop.set()
             self.report.append('Cancelación solicitada; espera a completar la operación actual.')
+            if self._work_training:
+                self._training_stage = 'Cancelación solicitada; terminando la operación actual…'
+                self._update_training_activity()
+            self.cancel_button.setEnabled(False)
 
     # ─── Prueba / inferencia ─────────────────────────────────
 

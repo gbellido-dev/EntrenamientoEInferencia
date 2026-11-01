@@ -70,6 +70,81 @@ class FakeCamera:
 
 
 class ObjectTests(unittest.TestCase):
+    def test_training_stays_responsive_during_loading_and_reports_outcome(self):
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+        import builtins
+        import threading
+        import time
+        from types import SimpleNamespace
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtTest import QTest
+        from aula_ia.object_desktop import ObjectWindow
+        app = QApplication.instance() or QApplication([])
+        original_import = builtins.__import__
+        gui_thread = threading.get_ident()
+
+        def wait_until(predicate):
+            deadline = time.monotonic() + 5
+            while not predicate() and time.monotonic() < deadline:
+                QTest.qWait(10)
+            self.assertTrue(predicate())
+
+        with tempfile.TemporaryDirectory() as folder:
+            for outcome in ('Completado', 'Error', 'Cancelado'):
+                with self.subTest(outcome=outcome):
+                    loading, release = threading.Event(), threading.Event()
+                    window = ObjectWindow()
+                    window.project = object_fixture(folder)
+                    window.path = Path(folder)/'proyecto.json'
+                    window.show()
+
+                    def train(project, output, epochs, rate, report, stop):
+                        self.assertNotEqual(threading.get_ident(), gui_thread)
+                        if outcome == 'Error':
+                            raise RuntimeError('Fallo de entrenamiento simulado')
+                        report(f'Época 1/{epochs} · lote 1/2 · 4/8 imágenes procesadas')
+                        return Path(folder)/'detector.zip', {}
+
+                    def slow_import(name, *args, **kwargs):
+                        if name == 'aula_ia.object_training':
+                            self.assertNotEqual(threading.get_ident(), gui_thread)
+                            loading.set()
+                            if not release.wait(5):
+                                raise RuntimeError('Tiempo de prueba agotado')
+                            return SimpleNamespace(train_objects=train)
+                        return original_import(name, *args, **kwargs)
+
+                    try:
+                        with patch('builtins.__import__', side_effect=slow_import), patch.object(window, 'error') as error:
+                            window.start_train()
+                            wait_until(loading.is_set)
+                            self.assertEqual(window.train_progress.maximum(), 0)
+                            self.assertIn('Entrenando', window.train_button.text())
+                            self.assertFalse(window.train_button.isEnabled())
+                            self.assertTrue(window.cancel_button.isEnabled())
+                            worker = window.worker
+                            window.start_train()
+                            self.assertIs(window.worker, worker)
+                            QTest.qWait(1100)
+                            self.assertIn('00:01', window.train_status.text())
+                            self.assertIn('Cargando PyTorch', window.train_status.text())
+                            if outcome == 'Cancelado':
+                                window.cancel()
+                                self.assertIn('Cancelación solicitada', window.train_status.text())
+                            release.set()
+                            wait_until(lambda: not window.worker.isRunning() and not window._activity_timer.isActive())
+                            self.assertIn(outcome, window.train_status.text())
+                            self.assertEqual(window.train_progress.format(), outcome)
+                            self.assertTrue(window.train_button.isEnabled())
+                            self.assertFalse(window.cancel_button.isEnabled())
+                            self.assertEqual(error.call_count, int(outcome == 'Error'))
+                    finally:
+                        release.set()
+                        if window.worker:
+                            window.worker.wait(6000)
+                        app.processEvents()
+                        window.close()
+
     def test_empty_canvas_click_selects_photos_and_drop_imports_one_file(self):
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
         from PySide6.QtWidgets import QApplication
