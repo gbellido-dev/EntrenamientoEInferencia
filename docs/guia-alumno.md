@@ -21,6 +21,8 @@ También puedes pulsar el área vacía del editor para seleccionar una o varias 
 
 El selector «Conjunto» recuerda tu última elección para las siguientes fotos sin asignar, también al avanzar automáticamente después de dibujar un rectángulo. Las fotos que ya tienen conjunto conservan su valor; verlas no cambia tu última elección. Si eliges «Automático / Otro» expresamente para una foto, esa elección también se conserva. La preferencia se guarda con el proyecto.
 
+Para cambiar varias fotos a otro conjunto, abre «Todas». Marca sus casillas o selecciona filas con Ctrl+clic (fotos sueltas) y Shift+clic (un tramo). El contador indica cuántas se moverán. Elige el destino bajo la lista y pulsa «Mover seleccionadas». Si hay casillas marcadas, se usan esas fotos; en caso contrario se usan las filas resaltadas. «Limpiar selección» desmarca todo. Los rectángulos y las etiquetas de las fotos se conservan.
+
 Una foto sin revisar no es lo mismo que una foto revisada sin objetos. Las fotos pendientes se omiten para no dar respuestas incorrectas al modelo.
 
 Los ejemplos de la demostración son opcionales y pertenecen a otro proyecto. No necesitas incluir sus etiquetas ni sus imágenes en tu trabajo.

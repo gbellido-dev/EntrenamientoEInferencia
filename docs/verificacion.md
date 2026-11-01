@@ -2,7 +2,7 @@
 
 Entorno: Windows, Python 3.12.14. Las versiones instaladas están registradas en `requirements-windows.lock.txt`.
 
-La batería de **21 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas, la selección de fotos desde el área vacía, la respuesta de la ventana durante una carga lenta del entrenamiento y el instalador de Raspberry Pi. También se comprueban los estados de éxito, error y cancelación del entrenamiento, y que el conjunto elegido se mantenga al pasar a fotos sin asignar, sin sobrescribir asignaciones previas. Se han retirado las versiones anteriores y sus dependencias internas.
+La batería de **22 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas, la selección de fotos desde el área vacía, la respuesta de la ventana durante una carga lenta del entrenamiento y el instalador de Raspberry Pi. También se comprueban los estados de éxito, error y cancelación del entrenamiento, que el conjunto elegido se mantenga al pasar a fotos sin asignar y el cambio de conjunto de varias fotos mediante casillas, Ctrl+clic y Shift+clic sin perder sus anotaciones. Se han retirado las versiones anteriores y sus dependencias internas.
 
 ## Comprobaciones
 

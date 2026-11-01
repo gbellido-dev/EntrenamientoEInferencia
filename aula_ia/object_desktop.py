@@ -25,7 +25,7 @@ import sys
 import time
 
 from PIL import Image
-from PySide6.QtCore import Qt, QRectF, QPointF, QSize, Signal, QMimeData, QTimer
+from PySide6.QtCore import Qt, QRectF, QPointF, QSize, Signal, QMimeData, QTimer, QItemSelectionModel
 from PySide6.QtGui import (
     QColor, QImage, QPainter, QPen, QPixmap, QBrush, QFont,
     QShortcut, QKeySequence, QFontMetrics,
@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
     QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox, QSplitter,
     QTabWidget, QTextBrowser, QTextEdit, QToolBar, QVBoxLayout, QWidget,
-    QComboBox,
+    QComboBox, QAbstractItemView, QStyle, QStyleOptionViewItem,
 )
 
 from aula_ia.workers import Worker
@@ -366,6 +366,28 @@ QToolBar {
 # ─────────────────────────────────────────────────────────────
 # 3. BoxCanvas — widget de dibujo
 # ─────────────────────────────────────────────────────────────
+class PhotoList(QListWidget):
+    """Distinguir marcar casillas de avanzar para anotar una foto."""
+    selecting_batch = False
+
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.position().toPoint())
+        checkbox = False
+        if item:
+            option = QStyleOptionViewItem()
+            self.itemDelegate().initStyleOption(option, self.indexFromItem(item))
+            option.rect = self.visualItemRect(item)
+            check_rect = self.style().subElementRect(
+                QStyle.SubElement.SE_ItemViewItemCheckIndicator, option, self)
+            checkbox = check_rect.contains(event.position().toPoint())
+        self.selecting_batch = checkbox or bool(event.modifiers() & (
+            Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+        try:
+            super().mousePressEvent(event)
+        finally:
+            self.selecting_batch = False
+
+
 class BoxCanvas(QWidget):
     """Widget interactivo para dibujar y visualizar bounding boxes."""
 
@@ -756,7 +778,10 @@ class ObjectWindow(QMainWindow):
         """)
 
         # Lista general compatible con API existente (self.images)
-        self.images = QListWidget()
+        self.images = PhotoList()
+        self.images.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.images.itemSelectionChanged.connect(self._update_bulk_selection)
+        self.images.itemChanged.connect(self._update_bulk_selection)
         self.images.currentRowChanged.connect(lambda idx: self._on_list_row_changed('all', idx))
 
         self.images_train = QListWidget()
@@ -774,6 +799,27 @@ class ObjectWindow(QMainWindow):
         self.partition_tabs.addTab(self.images_test, '🟣 Test (0)')
         self.partition_tabs.currentChanged.connect(self._on_partition_tab_changed)
         left_layout.addWidget(self.partition_tabs, 1)
+
+        self.bulk_panel = QWidget()
+        bulk_layout = QVBoxLayout(self.bulk_panel)
+        bulk_layout.setContentsMargins(0, 0, 0, 0)
+        self.bulk_count = QLabel('0 fotos seleccionadas')
+        self.bulk_count.setWordWrap(True)
+        self.bulk_count.setToolTip(
+            'Marca casillas o selecciona con Ctrl+clic y Shift+clic. '
+            'Si hay casillas marcadas, se usan esas fotos; si no, la selección resaltada.'
+        )
+        bulk_layout.addWidget(self.bulk_count)
+        bulk_row = QHBoxLayout()
+        self.bulk_partition_combo = QComboBox()
+        self.bulk_partition_combo.addItems(['Automático / Otro', '🔵 Train', '🟡 Val', '🟣 Test'])
+        bulk_row.addWidget(self.bulk_partition_combo)
+        self.bulk_move_button = self._make_button('Mover seleccionadas', self.move_selected_partition)
+        self.bulk_move_button.setEnabled(False)
+        bulk_row.addWidget(self.bulk_move_button)
+        bulk_layout.addLayout(bulk_row)
+        bulk_layout.addWidget(self._make_button('Limpiar selección', self.clear_bulk_selection))
+        left_layout.addWidget(self.bulk_panel)
 
         # Botones rápidos para añadir fotos directamente a la partición activa o seleccionada
         add_part_row = QHBoxLayout()
@@ -1296,13 +1342,17 @@ class ObjectWindow(QMainWindow):
     def _on_partition_tab_changed(self, index: int):
         tab_map = {0: 'all', 1: 'train', 2: 'val', 3: 'test'}
         self._current_partition = tab_map.get(index, 'all')
+        self.bulk_panel.setVisible(index == 0)
         self._sync_active_list_selection()
 
     def _on_list_row_changed(self, part: str, row_idx: int):
         if self._updating_lists or row_idx < 0:
             return
         if part == 'all':
-            self.select(row_idx)
+            extending = bool(QApplication.keyboardModifiers() & (
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+            self.select(row_idx, inherit_partition=not extending and not self.images.selecting_batch
+                        and len(self.images.selectedItems()) <= 1)
         else:
             # Mapear row_idx de la sublista a la lista general
             matches = [i for i, r in enumerate(self.project['images']) if self._detect_partition(r.get('group', '')) == part]
@@ -1316,6 +1366,12 @@ class ObjectWindow(QMainWindow):
             return
         self.project['preferred_partition'] = combo_idx
         row = self.project['images'][self.current]
+        self._assign_partition(row, combo_idx)
+        self.group.setText(row['group'])
+        self.update_row()
+
+    @staticmethod
+    def _assign_partition(row, combo_idx):
         row['partition_assigned'] = True
         curr_g = row.get('group', '')
         # Quitar prefijos anteriores si los tenía
@@ -1335,9 +1391,51 @@ class ObjectWindow(QMainWindow):
         else:
             row['group'] = clean_g or 'sesion-1'
 
-        self.group.setText(row['group'])
-        self.update_row()
-        self._refresh_sublists()
+    def _bulk_indexes(self):
+        checked = [index for index in range(self.images.count())
+                   if self.images.item(index).checkState() == Qt.CheckState.Checked]
+        return checked or sorted(self.images.row(item) for item in self.images.selectedItems())
+
+    def _update_bulk_selection(self, *args):
+        if not hasattr(self, 'bulk_count'):
+            return
+        indexes = self._bulk_indexes()
+        checked = any(self.images.item(index).checkState() == Qt.CheckState.Checked for index in indexes)
+        self.bulk_count.setText(f'{len(indexes)} fotos ' + ('marcadas con casillas' if checked else 'seleccionadas'))
+        self.bulk_move_button.setEnabled(bool(indexes))
+
+    def clear_bulk_selection(self):
+        self.images.blockSignals(True)
+        for index in range(self.images.count()):
+            self.images.item(index).setCheckState(Qt.CheckState.Unchecked)
+        self.images.clearSelection()
+        self.images.blockSignals(False)
+        self._update_bulk_selection()
+
+    def move_selected_partition(self):
+        if not self.project or self._current_partition != 'all':
+            return
+        indexes = self._bulk_indexes()
+        if not indexes:
+            return
+        destination = self.bulk_partition_combo.currentIndex()
+        for index in indexes:
+            self._assign_partition(self.project['images'][index], destination)
+        self.project['preferred_partition'] = destination
+        if self.valid():
+            self.group.setText(self.project['images'][self.current]['group'])
+            saved = self.update_row()
+        else:
+            try:
+                self.save()
+                self._refresh_sublists()
+                saved = True
+            except Exception as error:
+                self.error(error)
+                saved = False
+        if saved:
+            self.statusBar().showMessage(
+                f'{len(indexes)} fotos movidas a {self.bulk_partition_combo.currentText()}.', 5000)
 
     def _refresh_sublists(self):
         """Actualiza el contenido de las 4 pestañas de listas y sus contadores."""
@@ -1380,7 +1478,7 @@ class ObjectWindow(QMainWindow):
         self._updating_lists = True
         try:
             self.images.blockSignals(True)
-            self.images.setCurrentRow(self.current)
+            self.images.setCurrentRow(self.current, QItemSelectionModel.SelectionFlag.NoUpdate)
             self.images.blockSignals(False)
 
             # Sincronizar sublistas
@@ -1429,6 +1527,8 @@ class ObjectWindow(QMainWindow):
         for row in self.project['images']:
             item = QListWidgetItem(self.row_text(row))
             item.setForeground(self._row_color(row))
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
             self.images.addItem(item)
         self.images.blockSignals(False)
         self.current = -1
@@ -1452,6 +1552,7 @@ class ObjectWindow(QMainWindow):
             self.images.blockSignals(False)
             self.select(0, inherit_partition=False)
         self._update_status()
+        self._update_bulk_selection()
 
     def select(self, index: int, inherit_partition: bool = True):
         self.current = index

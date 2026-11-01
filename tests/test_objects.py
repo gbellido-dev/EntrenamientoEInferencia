@@ -70,6 +70,80 @@ class FakeCamera:
 
 
 class ObjectTests(unittest.TestCase):
+    def test_bulk_partition_with_ctrl_shift_selection_and_checkboxes(self):
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+        import copy
+        from PySide6.QtWidgets import QApplication, QStyle, QStyleOptionViewItem
+        from PySide6.QtCore import Qt, QPoint
+        from PySide6.QtTest import QTest
+        from aula_ia.object_desktop import ObjectWindow
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as folder:
+            window = ObjectWindow()
+            window.project = object_fixture(folder)
+            window.path = Path(folder)/'proyecto.json'
+            window.refresh()
+            window.show()
+            app.processEvents()
+            rows = window.project['images']
+            annotations = copy.deepcopy([(r['boxes'], r['box_labels'], r['reviewed']) for r in rows])
+
+            def click_row(index, modifier=Qt.KeyboardModifier.NoModifier):
+                window.images.scrollToItem(window.images.item(index))
+                app.processEvents()
+                rect = window.images.visualItemRect(window.images.item(index))
+                QTest.mouseClick(window.images.viewport(), Qt.MouseButton.LeftButton, modifier,
+                                 QPoint(rect.left() + 70, rect.center().y()))
+
+            click_row(0)
+            click_row(2, Qt.KeyboardModifier.ControlModifier)
+            self.assertEqual(window._bulk_indexes(), [0, 2])
+            click_row(4, Qt.KeyboardModifier.ShiftModifier)
+            selected = window._bulk_indexes()
+            self.assertTrue({2, 3, 4}.issubset(selected))
+            self.assertIn(str(len(selected)), window.bulk_count.text())
+            original_groups = [r['group'] for r in rows]
+            window.bulk_partition_combo.setCurrentIndex(2)
+            QTest.mouseClick(window.bulk_move_button, Qt.MouseButton.LeftButton)
+            self.assertEqual(window._bulk_indexes(), selected)
+            for index, row in enumerate(rows):
+                if index in selected:
+                    self.assertTrue(row['group'].startswith('val-'))
+                else:
+                    self.assertEqual(row['group'], original_groups[index])
+            window.images.scrollToItem(window.images.item(6))
+            app.processEvents()
+            option = QStyleOptionViewItem()
+            window.images.itemDelegate().initStyleOption(option, window.images.indexFromItem(window.images.item(6)))
+            option.rect = window.images.visualItemRect(window.images.item(6))
+            check_rect = window.images.style().subElementRect(
+                QStyle.SubElement.SE_ItemViewItemCheckIndicator, option, window.images)
+            QTest.mouseClick(window.images.viewport(), Qt.MouseButton.LeftButton, pos=check_rect.center())
+            self.assertEqual(rows[6]['group'], original_groups[6])
+            self.assertEqual(window.images.item(6).checkState(), Qt.CheckState.Checked)
+            window.images.item(7).setCheckState(Qt.CheckState.Checked)
+            self.assertEqual(window._bulk_indexes(), [6, 7])
+            self.assertIn('2 fotos marcadas', window.bulk_count.text())
+            window.bulk_partition_combo.setCurrentIndex(3)
+            QTest.mouseClick(window.bulk_move_button, Qt.MouseButton.LeftButton)
+            self.assertTrue(rows[6]['group'].startswith('test-'))
+            self.assertTrue(rows[7]['group'].startswith('test-'))
+            for index in selected:
+                self.assertTrue(rows[index]['group'].startswith('val-'))
+            window.clear_bulk_selection()
+            self.assertEqual(window._bulk_indexes(), [])
+            self.assertFalse(window.bulk_move_button.isEnabled())
+            window.images.item(6).setCheckState(Qt.CheckState.Checked)
+            window.bulk_partition_combo.setCurrentIndex(0)
+            window.move_selected_partition()
+            self.assertEqual(window._detect_partition(rows[6]['group']), 'other')
+            self.assertEqual(annotations, [(r['boxes'], r['box_labels'], r['reviewed']) for r in rows])
+            saved = json.loads(window.path.read_text(encoding='utf-8'))
+            self.assertEqual(saved['images'][6]['group'], rows[6]['group'])
+            self.assertTrue(saved['images'][7]['group'].startswith('test-'))
+            window.close()
+        app.processEvents()
+
     def test_partition_choice_follows_new_images_without_overwriting_assignments(self):
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
         from PySide6.QtWidgets import QApplication
