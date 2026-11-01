@@ -819,6 +819,14 @@ class ObjectWindow(QMainWindow):
         self.bulk_move_button.setEnabled(False)
         bulk_row.addWidget(self.bulk_move_button)
         bulk_layout.addLayout(bulk_row)
+        self.bulk_label_button = self._make_button('Etiquetar fotos completas…', self.label_whole_images)
+        self.bulk_label_button.setToolTip(
+            'Elige una etiqueta para todas las fotos marcadas o seleccionadas. '
+            'Se crea una anotación que ocupa toda cada imagen. '
+            'Úsalo cuando el objeto ocupa la foto; para localizar objetos pequeños o varios objetos, dibuja sus recuadros.'
+        )
+        self.bulk_label_button.setEnabled(False)
+        bulk_layout.addWidget(self.bulk_label_button)
         bulk_layout.addWidget(self._make_button('Limpiar selección', self.clear_bulk_selection))
         left_layout.addWidget(self.bulk_panel)
 
@@ -945,6 +953,8 @@ class ObjectWindow(QMainWindow):
     def _on_class_changed(self, value: str):
         self.canvas.current_label = value
         self.canvas._update_cursor()
+        if hasattr(self, 'bulk_label_button'):
+            self._update_bulk_selection()
 
     def canvas_delete(self):
         self.canvas.delete_selected()
@@ -1174,6 +1184,8 @@ class ObjectWindow(QMainWindow):
         self.threshold.hide()
         self.test_button = self._make_button('🔍 Detectar en imagen', self.test_image, 'primary')
         cfg_glayout.addWidget(self.test_button)
+        self.camera_button = self._make_button('Probar cámara del PC…', self.test_pc_camera)
+        cfg_glayout.addWidget(self.camera_button)
         left_layout.addWidget(cfg_group)
 
         # Grupo — resultados
@@ -1431,6 +1443,7 @@ class ObjectWindow(QMainWindow):
         checked = any(self.images.item(index).checkState() == Qt.CheckState.Checked for index in indexes)
         self.bulk_count.setText(f'{len(indexes)} fotos ' + ('marcadas con casillas' if checked else 'seleccionadas'))
         self.bulk_move_button.setEnabled(bool(indexes))
+        self.bulk_label_button.setEnabled(bool(indexes) and bool(self.project and self.project['classes']))
 
     def clear_bulk_selection(self):
         self.images.blockSignals(True)
@@ -1464,6 +1477,78 @@ class ObjectWindow(QMainWindow):
         if saved:
             self.statusBar().showMessage(
                 f'{len(indexes)} fotos movidas a {self.bulk_partition_combo.currentText()}.', 5000)
+
+    def label_whole_images(self):
+        if not self.project or self._current_partition != 'all':
+            return
+        indexes = self._bulk_indexes()
+        if not indexes:
+            return
+        if not self.project['classes']:
+            return self.error('Añade una etiqueta al proyecto antes de asignarla a las fotos.')
+        label, ok = QInputDialog.getItem(
+            self, 'Etiquetar fotos completas',
+            f'Etiqueta para {len(indexes)} fotos completas (una anotación por foto):',
+            self.project['classes'], max(0, self.class_choice.currentIndex()), False,
+        )
+        if not ok or label not in self.project['classes']:
+            return
+        try:
+            prepared = {}
+            for index in indexes:
+                row = self.project['images'][index]
+                with Image.open(row['path']) as image:
+                    width, height = image.size
+                prepared[index] = [[0, 0, width, height]]
+        except Exception as error:
+            return self.error(f'No se han cambiado las fotos. No se pudo leer una imagen: {error}')
+        replacing = [index for index in indexes if self.project['images'][index]['boxes']
+                     and (self.project['images'][index]['boxes'] != prepared[index]
+                          or self.project['images'][index]['box_labels'] != [label])]
+        if replacing:
+            count = sum(len(self.project['images'][index]['boxes']) for index in replacing)
+            answer = QMessageBox.question(
+                self, 'Sustituir anotaciones',
+                f'{len(replacing)} fotos ya tienen {count} rectángulos. '
+                f'Se sustituirán por una sola anotación de toda la imagen con la etiqueta «{label}». '
+                'Las fotos originales se conservan. ¿Continuar?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        previous = {index: copy.deepcopy(self.project['images'][index]) for index in indexes}
+        previous_undo = {index: copy.deepcopy(self.undo_boxes.get(index)) for index in indexes}
+        try:
+            for index in indexes:
+                row = self.project['images'][index]
+                if row['boxes'] != prepared[index] or row['box_labels'] != [label] or not row.get('reviewed'):
+                    self.undo_boxes.setdefault(index, []).append(
+                        (copy.deepcopy(row['boxes']), row['box_labels'].copy(), row.get('reviewed', False)))
+                    row.update(boxes=prepared[index], box_labels=[label], reviewed=True)
+            self.save()
+        except Exception as error:
+            for index, old in previous.items():
+                self.project['images'][index].clear()
+                self.project['images'][index].update(old)
+                if previous_undo[index] is None:
+                    self.undo_boxes.pop(index, None)
+                else:
+                    self.undo_boxes[index] = previous_undo[index]
+            return self.error(f'No se han aplicado los cambios porque no se pudieron guardar: {error}')
+        self.class_choice.setCurrentText(label)
+        self.images.blockSignals(True)
+        for index in indexes:
+            row = self.project['images'][index]
+            self.images.item(index).setText(self.row_text(row))
+            self.images.item(index).setForeground(self._row_color(row))
+        self.images.blockSignals(False)
+        if self.valid():
+            self.select(self.current, inherit_partition=False)
+            self.update_row(persist=False)
+        else:
+            self._refresh_sublists()
+        self.statusBar().showMessage(f'{len(indexes)} fotos completas etiquetadas como «{label}».', 5000)
 
     def _refresh_sublists(self):
         """Actualiza el contenido de las 4 pestañas de listas y sus contadores."""
@@ -1609,7 +1694,7 @@ class ObjectWindow(QMainWindow):
         self._sync_active_list_selection()
         self._update_status()
 
-    def update_row(self) -> bool:
+    def update_row(self, persist=True) -> bool:
         row = self.project['images'][self.current]
         item = self.images.item(self.current)
         if item:
@@ -1629,6 +1714,8 @@ class ObjectWindow(QMainWindow):
             f'{self.current + 1}/{total}  ·  {name}  ·  {len(row["boxes"])} obj'
         )
         self._refresh_sublists()
+        if not persist:
+            return True
         try:
             self.save()
             return True
@@ -1786,7 +1873,7 @@ class ObjectWindow(QMainWindow):
         self.worker.result.connect(self._on_work_result)
         self.worker.finished.connect(self.finished)
         self.editor.setEnabled(False)
-        for btn in (self.train_button, self.test_button, self.model_button, self.export_button):
+        for btn in (self.train_button, self.test_button, self.model_button, self.export_button, self.camera_button):
             btn.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self._update_status('Entrenando…' if training else 'Procesando…')
@@ -1841,7 +1928,7 @@ class ObjectWindow(QMainWindow):
 
     def finished(self):
         self.editor.setEnabled(True)
-        for btn in (self.train_button, self.test_button, self.model_button, self.export_button):
+        for btn in (self.train_button, self.test_button, self.model_button, self.export_button, self.camera_button):
             btn.setEnabled(True)
         self.cancel_button.setEnabled(False)
         if self._work_training:
@@ -1963,6 +2050,13 @@ class ObjectWindow(QMainWindow):
             self.show_metrics(metrics)
 
         self.run_worker(work, ready)
+
+    def test_pc_camera(self):
+        if not self.package:
+            return self.error('Abre o entrena primero un detector para probarlo con la cámara.')
+        from aula_ia.pc_camera import PCCameraDialog
+        dialog = PCCameraDialog(self.package, self.threshold.value(), self)
+        dialog.exec()
 
     def test_image(self):
         if not self.package:

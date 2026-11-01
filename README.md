@@ -94,6 +94,12 @@ La misma descarga está disponible por terminal:
 
 Por defecto se guarda en `datasets/propietario/conjunto/latest/` (o `version-N/`) y se genera un inventario JSON junto a esa carpeta. Datasets de distintos propietarios quedan separados. Si cancelas, pueden quedar archivos parciales para revisar o reintentar. El código, los tests y la documentación se versionan en Git; datasets, pesos, modelos exportados, proyectos locales, credenciales y entornos virtuales quedan excluidos. El conjunto de Kaggle descargado previamente permanece local como material opcional.
 
+## Fotos completas y cámara del PC
+
+En «Todas», selecciona varias fotos y pulsa **«Etiquetar fotos completas…»** para asignarles una etiqueta sin dibujar: se crea una anotación de tamaño completo por imagen. Pide confirmación para sustituir anotaciones previas y permite deshacer por fotografía durante la sesión. Es adecuado cuando un único objeto ocupa la foto; para aprender a localizar varios objetos en una escena se necesitan recuadros ajustados.
+
+En «3 · Prueba el detector», **«Probar cámara del PC…»** permite detección en vivo con un ZIP abierto o recién entrenado. Incluye búsqueda de cámaras por índice, resolución solicitada, límite de FPS, confianza ajustable en vivo, espejo y guardado de capturas con o sin detecciones. Muestra resolución real, FPS procesados, tiempo de inferencia y objetos del fotograma. Empieza con 640 × 480 y 5 FPS. Captura y modelo se ejecutan en segundo plano; se libera la cámara al detener o cerrar. Requiere cámara y permisos de Windows para aplicaciones de escritorio. Las pruebas automáticas simulan el dispositivo; falta comprobarlo con hardware físico.
+
 ## Entrenar por terminal
 
 ```powershell

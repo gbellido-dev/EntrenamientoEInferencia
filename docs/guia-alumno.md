@@ -27,6 +27,12 @@ Una foto sin revisar no es lo mismo que una foto revisada sin objetos. Las fotos
 
 Los ejemplos de la demostración son opcionales y pertenecen a otro proyecto. No necesitas incluir sus etiquetas ni sus imágenes en tu trabajo.
 
+## Etiquetar fotos completas en bloque
+
+En «Todas», selecciona las fotos con casillas, Ctrl+clic o Shift+clic y pulsa «Etiquetar fotos completas…». Elige una etiqueta: se crea una sola anotación que ocupa toda cada fotografía y se confirma su revisión. Puedes repetir con otras fotos y otra etiqueta. El conjunto y el grupo de cada foto se conservan; las fotos descartadas siguen descartadas. Si ya había otras anotaciones, se pide confirmación antes de sustituirlas. Puedes abrir una foto y usar «Deshacer» durante la sesión para recuperar sus anotaciones anteriores.
+
+Úsalo con fotos donde un único objeto ocupa prácticamente toda la imagen. Si quieres que después encuentre varios objetos pequeños dentro de una escena, enseña sus ubicaciones con recuadros ajustados: marcar toda la foto no enseña dónde termina cada objeto.
+
 ## Descargar ejemplos desde Kaggle
 
 Pulsa «Descargar de Kaggle…» y pega la dirección de un dataset o su identificador `propietario/dataset`. Elige la carpeta base y descarga. Puedes usar cualquier dataset; la herramienta no presupone caras, células ni otras clases. También admite `/versions/N` para repetir una práctica con la misma versión de datos.
@@ -44,6 +50,14 @@ Para cambiar únicamente la clase de un rectángulo, selecciónalo, elige la eti
 ## Mientras se entrena
 
 Al pulsar «Entrenar y exportar», verás «Entrenando», el tiempo transcurrido y la tarea actual. La barra se anima durante la preparación; después muestra las épocas y el registro indica los lotes de imágenes procesados. La primera carga puede tardar porque prepara PyTorch y descarga los pesos si faltan. Puedes solicitar la cancelación; se completará la operación en curso antes de detenerse. Al final se indica «Completado», «Cancelado» o «Error».
+
+## Probar con la cámara del PC
+
+Después de entrenar o abrir un ZIP, ve a «3 · Prueba el detector» y pulsa «Probar cámara del PC…». Elige una cámara por su índice; «Buscar cámaras» comprueba los índices 0–9 disponibles. La cámara se activa al buscar o al pulsar «Iniciar cámara» y se libera al detener o cerrar la prueba. Si no abre, revisa los permisos de cámara para aplicaciones de escritorio de Windows y cierra otras aplicaciones que la estén usando.
+
+Empieza con **640 × 480 y un límite de 5 FPS**. La ventana muestra la resolución que entrega realmente la cámara, los FPS procesados y los milisegundos de inferencia. Una resolución mayor puede hacer más lenta la captura; este modelo sigue procesando a 320 × 320. Cambia la confianza mínima mientras observas los resultados y compara los objetos encontrados con las falsas alarmas. «Vista en espejo» invierte la imagen y sus detecciones juntas.
+
+Los recuadros muestran etiqueta y confianza. El contador corresponde a los objetos del fotograma actual. Puedes guardar una foto sin anotaciones o con las detecciones; «Detener» conserva la última imagen. Para cambiar de cámara, resolución o límite de FPS, detén la prueba y vuelve a iniciar con los ajustes nuevos.
 
 ## Las palabras que necesitas
 
