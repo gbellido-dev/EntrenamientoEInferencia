@@ -3,6 +3,11 @@ let previewURL;
 let busy = false;
 let cameraRunning = false;
 let cameraURL;
+let modelId = null;
+let modelLabels = [];
+let cameraFrames = 0;
+let frameTimes = [];
+let cameraSession = 0;
 async function request(url, options = {}) {
   const response = await fetch(url, options);
   let result;
@@ -12,6 +17,8 @@ async function request(url, options = {}) {
 }
 async function refresh() {
   const data = await request('/api/status');
+  modelId = data.model_id;
+  modelLabels = data.ready ? data.model.classes : [];
   $('status').textContent = data.ready ? '● Modelo preparado' : '○ Esperando un modelo';
   $('model-info').textContent = data.ready ? `${data.model.name} · Etiquetas: ${data.model.classes.join(', ')}` : 'Todavía no hay un modelo activo.';
   const detector = data.ready;
@@ -70,16 +77,42 @@ function cameraOptions() {
 }
 async function stopCamera() {
   cameraRunning = false;
+  cameraSession += 1;
   $('camera-stop').disabled = true;
   try { await request('/api/camera/stop', cameraOptions()); }
   catch (error) { $('message').textContent = error.message; }
   $('camera-start').disabled = false;
   $('camera-status').textContent = 'Cámara detenida.';
   $('camera-preview').hidden = true;
+  $('camera-live').hidden = true;
   if (cameraURL) { URL.revokeObjectURL(cameraURL); cameraURL = undefined; }
 }
-async function cameraFrame() {
-  if (!cameraRunning) return;
+function updateCameraStats(response, elapsed) {
+  cameraFrames += 1;
+  frameTimes.push(performance.now());
+  if (frameTimes.length > 20) frameTimes.shift();
+  const span = frameTimes[frameTimes.length - 1] - frameTimes[0];
+  $('stat-objects').textContent = response.headers.get('X-Object-Count') || '0';
+  $('stat-fps').textContent = frameTimes.length > 1 && span > 0 ? ((frameTimes.length - 1) * 1000 / span).toFixed(1) : '—';
+  $('stat-inference').textContent = `${response.headers.get('X-Inference-Ms')} ms`;
+  $('stat-frame').textContent = `${response.headers.get('X-Frame-Ms')} ms`;
+  $('stat-network').textContent = `${elapsed.toFixed(0)} ms`;
+  $('stat-frames').textContent = String(cameraFrames);
+  $('stat-resolution').textContent = `${response.headers.get('X-Frame-Width')} × ${response.headers.get('X-Frame-Height')}`;
+  $('camera-counts').replaceChildren();
+  const counts = JSON.parse(response.headers.get('X-Object-Counts') || '{}');
+  for (const [id, count] of Object.entries(counts)) {
+    const item = document.createElement('li');
+    const label = response.headers.get('X-Model-Id') === modelId ? modelLabels[Number(id)] : null;
+    item.textContent = `${label || `Etiqueta ${Number(id) + 1}`}: ${count}`;
+    $('camera-counts').append(item);
+  }
+  if (!Object.keys(counts).length) {
+    const item = document.createElement('li'); item.textContent = 'Sin objetos detectados'; $('camera-counts').append(item);
+  }
+}
+async function cameraFrame(session) {
+  if (!cameraRunning || session !== cameraSession) return;
   const start = performance.now();
   try {
     const threshold = Number($('threshold').value);
@@ -87,19 +120,25 @@ async function cameraFrame() {
     const response = await fetch(`/api/camera/frame?threshold=${threshold}`, cameraOptions());
     if (!response.ok) {
       const error = await response.json();
-      if (response.status === 409 && String(error.detail).includes('ocupado') && cameraRunning) { setTimeout(cameraFrame, 500); return; }
+      if (response.status === 409 && String(error.detail).includes('ocupado') && cameraRunning) { setTimeout(() => cameraFrame(session), 500); return; }
       throw new Error(error.detail || 'No se puede leer la cámara.');
     }
     const blob = await response.blob();
-    if (!cameraRunning) return;
+    if (!cameraRunning || session !== cameraSession) return;
+    const elapsed = performance.now() - start;
+    if (response.headers.get('X-Model-Id') !== modelId) await refresh();
+    if (!cameraRunning || session !== cameraSession) return;
     if (cameraURL) URL.revokeObjectURL(cameraURL);
     cameraURL = URL.createObjectURL(blob);
     $('camera-preview').src = cameraURL;
     $('camera-preview').hidden = false;
-    const elapsed = performance.now() - start;
-    $('camera-status').textContent = `${response.headers.get('X-Object-Count')} objetos · Modelo y salida: ${response.headers.get('X-Inference-Ms')} ms · Ciclo con red: ${elapsed.toFixed(0)} ms`;
-    setTimeout(cameraFrame, Math.max(0, 200-elapsed));
+    $('camera-live').hidden = false;
+    updateCameraStats(response, elapsed);
+    const activeText = 'Cámara activa · detección en directo.';
+    if ($('camera-status').textContent !== activeText) $('camera-status').textContent = activeText;
+    setTimeout(() => cameraFrame(session), Math.max(0, 200-elapsed));
   } catch (error) {
+    if (session !== cameraSession) return;
     await stopCamera();
     $('message').textContent = error.message;
   }
@@ -107,9 +146,12 @@ async function cameraFrame() {
 $('camera-start').addEventListener('click', () => action(async () => {
   await request('/api/camera/start', cameraOptions());
   cameraRunning = true;
+  cameraSession += 1;
+  cameraFrames = 0;
+  frameTimes = [];
   $('camera-start').disabled = true;
   $('camera-stop').disabled = false;
-  cameraFrame();
+  cameraFrame(cameraSession);
 }));
 $('camera-stop').addEventListener('click', stopCamera);
 window.addEventListener('pagehide', () => {

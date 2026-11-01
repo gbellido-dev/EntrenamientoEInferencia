@@ -2,9 +2,12 @@
 import argparse
 import base64
 import io
+import json
 import os
 import secrets
 import threading
+import time
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
 from PIL import Image
@@ -91,7 +94,8 @@ def create_app(data_dir=None, token=None, camera=None):
     def status():
         predictor = app.state.predictor
         return {'ready': predictor is not None,
-                'model': predictor.manifest if predictor else None}
+                'model': predictor.manifest if predictor else None,
+                'model_id': predictor.model_id if predictor else None}
 
     @app.post('/api/model')
     async def upload_model(file: UploadFile = File(...), x_aula_token: str = Header(default='')):
@@ -167,12 +171,22 @@ def create_app(data_dir=None, token=None, camera=None):
             if predictor is None:
                 raise HTTPException(409, 'Carga un detector de objetos.')
             try:
+                started = time.perf_counter()
                 image = camera.frame()
+                captured = time.perf_counter()
                 result = predictor.predict(image, threshold)
                 buffer = io.BytesIO()
                 annotated_image(image, result['detections']).save(buffer, format='JPEG', quality=80)
+                counts = Counter(item['class_id'] for item in result['detections'])
                 return Response(buffer.getvalue(), media_type='image/jpeg', headers={
-                    'X-Object-Count': str(len(result['detections'])), 'X-Inference-Ms': str(result['inference_ms'])})
+                    'X-Object-Count': str(len(result['detections'])),
+                    'X-Object-Counts': json.dumps(counts, separators=(',', ':')),
+                    'X-Inference-Ms': str(result['inference_ms']),
+                    'X-Processing-Ms': str(result['processing_ms']),
+                    'X-Capture-Ms': str(round((captured-started)*1000, 2)),
+                    'X-Frame-Ms': str(round((time.perf_counter()-started)*1000, 2)),
+                    'X-Frame-Width': str(image.width), 'X-Frame-Height': str(image.height),
+                    'X-Model-Id': predictor.model_id})
             except Exception as error:
                 raise HTTPException(400, str(error)[:350]) from error
         finally:

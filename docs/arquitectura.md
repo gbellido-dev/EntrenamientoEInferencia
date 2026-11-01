@@ -58,6 +58,8 @@ Antes de publicar el paquete se comparan cajas y puntuaciones ONNX/PyTorch en ha
 
 Las operaciones POST exigen cabecera `X-Aula-Token`. Hay una operación de carga/inferencia a la vez; se responde 409 si está ocupado. La cámara y el modelo son compartidos. Tras 30 segundos sin pedir imagen se libera la cámara.
 
+La cámara entrega JPEG anotados sucesivos. Las cabeceras de respuesta incluyen recuentos por ID de etiqueta, resolución, tiempos e identificador del modelo; el navegador calcula FPS y actualiza el panel sin acumular objetos como si fueran únicos. Un cambio de modelo actualiza las etiquetas del panel. Las sesiones de captura se identifican para descartar respuestas y temporizadores de una sesión ya detenida.
+
 Se limita el paquete y su contenido a 64 MiB, el manifiesto a 64 KiB, las métricas a 2 MiB, las fotos web a 10 MiB y 20 millones de píxeles. Los datos de entrenamiento locales admiten hasta 64 millones de píxeles. Los modelos deben proceder de una fuente de confianza; validar el contrato no es un sandbox.
 
 La versión no incluye segmentación, aceleradores ni cuantización. La captura y el rendimiento físicos siguen pendientes de probar en la Pi 4.

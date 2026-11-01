@@ -33,7 +33,25 @@ Se guardan automáticamente etiquetas, rectángulos, grupos y descartes. Las fot
 
 Cada etiqueta necesita objetos en al menos tres grupos; el conjunto necesita un mínimo técnico de seis imágenes revisadas. Mantén juntas las fotografías de una misma sesión, objeto o muestra. No se exige ninguna clase concreta ni ejemplos de temas ajenos a tu proyecto.
 
-## Documentación
+## Instalador para Raspberry Pi 4
+
+Extrae el paquete `AulaIA-RaspberryPi.zip` en una carpeta permanente de tu usuario en la Pi y ejecuta allí, **sin sudo**:
+
+```bash
+bash instalar_raspi.sh
+```
+
+Instala dependencias para cámara USB, genera la clave y activa la web al arrancar la Pi. Para cámara por cinta CSI usa `bash instalar_raspi.sh --camera csi`. Al terminar muestra la dirección y la clave. Requiere Raspberry Pi OS ARM64, Python 3.11+ e Internet; sudo se solicita únicamente para los pasos del sistema.
+
+Para generar el ZIP ligero en Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.crear_paquete_raspi
+```
+
+Se crea `dist/AulaIA-RaspberryPi.zip`, con el servidor y su instalador, sin entrenamiento, Qt, datasets, modelos ni el entorno de Windows. [Instrucciones completas](docs/raspberry-pi.md).
+
+## Guías
 
 - [Guía del alumno](docs/guia-alumno.md).
 - [Editor, entrenamiento y evaluación](docs/deteccion-objetos.md).

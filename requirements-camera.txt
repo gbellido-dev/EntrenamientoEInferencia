@@ -1,3 +1,3 @@
 -r requirements-raspi.txt
-# Captura USB en la Pi. Para CSI ver docs/deteccion-caras.md (Picamera2 del SO).
+# Captura USB en la Pi. Para CSI ver docs/raspberry-pi.md (Picamera2 del SO).
 opencv-python-headless>=4.10,<5

@@ -2,7 +2,7 @@
 
 Entorno: Windows, Python 3.12.14. Las versiones instaladas están registradas en `requirements-windows.lock.txt`.
 
-La batería de **11 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas. Se han retirado las versiones anteriores y sus dependencias internas.
+La batería de **18 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas y el instalador de Raspberry Pi. Se han retirado las versiones anteriores y sus dependencias internas.
 
 ## Comprobaciones
 
@@ -18,6 +18,10 @@ Las pruebas automáticas cubren:
 - Gradientes de fondo en imágenes negativas revisadas.
 - Carga web, autenticación, rechazo de archivos inválidos, persistencia y cámara simulada.
 - Conversión de color y liberación del backend USB con dispositivo simulado.
+- Instalador: simulación sin cambios, conservación de clave/modelo, fallo de dependencias sin sustituir el servicio, restauración tras fallo de arranque y limpieza de una primera instalación fallida.
+- CSI: acceso a paquetes del sistema y restricción de NumPy compatible.
+- ZIP de despliegue sin entrenamiento, Qt, datasets, modelos ni entornos de Windows; script Bash con finales de línea Linux.
+- Cámara web: cabeceras con recuentos por etiqueta, tiempos, resolución e identificador de modelo; panel de vídeo y estadísticas comprobado desde el navegador con una cámara simulada, sin abrir dispositivos físicos.
 
 También se comprueban sintaxis JavaScript, compilación de módulos Python y dependencias con `pip check`. Las capturas Qt se renderizan sin pantalla, registrando Segoe UI explícitamente porque ese entorno de pruebas no descubre fuentes automáticamente.
 

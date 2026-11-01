@@ -1,5 +1,6 @@
 """Contrato único de detección de objetos para Windows y Raspberry Pi."""
 import io
+import hashlib
 import json
 import math
 import time
@@ -125,6 +126,7 @@ class Predictor:
     def __init__(self, data):
         import onnxruntime as ort
         model, self.manifest, self.metrics = read_package(data)
+        self.model_id = hashlib.sha256(data).hexdigest()
         options = ort.SessionOptions()
         options.intra_op_num_threads = 2
         options.inter_op_num_threads = 1

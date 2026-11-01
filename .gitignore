@@ -17,3 +17,5 @@ datasets/
 kaggle.json
 *.key
 *.pem
+.raspi-envs/
+dist/

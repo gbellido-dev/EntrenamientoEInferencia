@@ -152,6 +152,11 @@ class ObjectTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(response.headers['content-type'], 'image/jpeg')
                 self.assertEqual(response.headers['X-Object-Count'], '2')
+                self.assertEqual(json.loads(response.headers['X-Object-Counts']), {'0': 1, '1': 1})
+                self.assertEqual(response.headers['X-Frame-Width'], '640')
+                self.assertEqual(response.headers['X-Frame-Height'], '480')
+                self.assertGreaterEqual(float(response.headers['X-Frame-Ms']), 0)
+                self.assertEqual(response.headers['X-Model-Id'], client.get('/api/status').json()['model_id'])
                 with Image.open(io.BytesIO(response.content)) as image:
                     self.assertEqual(image.size, (640, 480))
                 buffer = io.BytesIO()

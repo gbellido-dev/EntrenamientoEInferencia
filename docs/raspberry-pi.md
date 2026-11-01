@@ -4,7 +4,62 @@
 
 Consulta [el recorrido de anotación y entrenamiento](deteccion-objetos.md). Esta página recoge la instalación del servidor y las dos opciones de cámara.
 
-Necesitas Raspberry Pi OS de **64 bits**, Python 3.11 o 3.12, conexión a la red del aula y acceso inicial por terminal/SSH. Comprueba:
+## Instalación automática recomendada
+
+En Windows genera el paquete:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.crear_paquete_raspi
+```
+
+Copia `dist/AulaIA-RaspberryPi.zip` a la Pi por USB o SCP y extrae **todo** su contenido en una carpeta permanente de tu usuario, por ejemplo `~/AulaIA`. El repositorio es privado: para descargarlo desde GitHub debes iniciar sesión. El ZIP local evita configurar GitHub en la Pi.
+
+```bash
+mkdir -p ~/AulaIA
+unzip AulaIA-RaspberryPi.zip -d ~/AulaIA
+cd ~/AulaIA
+bash instalar_raspi.sh
+```
+
+Ejecuta **sin sudo**; se pedirá su contraseña para paquetes y systemd. El resto se ejecuta con tu usuario. La cámara predeterminada es USB y no hace falta conectarla para instalar.
+
+```bash
+# USB (predeterminada en la primera instalación)
+bash instalar_raspi.sh --camera usb
+
+# CSI por cinta
+bash instalar_raspi.sh --camera csi
+
+# Puerto e índice alternativos
+bash instalar_raspi.sh --camera usb --port 8080 --camera-index 1
+
+# Ver el plan sin modificar nada
+bash instalar_raspi.sh --dry-run --camera csi
+```
+
+El instalador comprueba Linux ARM64, Python 3.11+, APT, systemd y los archivos. Instala las dependencias y crea un entorno nuevo en `.raspi-envs/`; comprueba sus imports antes de cambiar el servicio. Para CSI usa Picamera2/OpenCV del sistema y fija su versión de NumPy para conservar su compatibilidad.
+
+Guarda la configuración en `~/.config/aula-ia/server.env` con permisos restringidos, genera una clave si no existe y crea `aula-ia.service` con tu usuario y las rutas reales. Habilita el arranque automático y comprueba que la web responde. Al terminar muestra **URL y clave**. Carga `detector-objetos.zip` en esa web. La cámara solo se abre al pulsar «Iniciar cámara».
+
+**No muevas la carpeta después:** el servicio usa esas rutas. Puedes repetir el comando desde la misma carpeta para reinstalar o cambiar USB/CSI; conserva la clave y los modelos. Cada intento usa un entorno nuevo y mantiene los anteriores para no alterar las dependencias del servidor que estaba funcionando.
+
+Si falla la descarga de dependencias no sustituye la configuración del servicio. Si falla el arranque nuevo, intenta restaurar la unidad y configuración anteriores. Esto restaura servicio/configuración, no archivos del programa que hayas sobrescrito por tu cuenta. Los modelos e imágenes no se borran.
+
+Si ya existe una unidad `aula-ia` creada manualmente, sin el marcador del instalador, este se detiene. Conserva una copia de esa unidad y retírala antes de usar la instalación automática; no se sustituyen servicios ajenos.
+
+Consulta desde la propia Pi la configuración y el diagnóstico:
+
+```bash
+cat ~/.config/aula-ia/server.env
+systemctl status aula-ia
+journalctl -u aula-ia -n 60 --no-pager
+```
+
+Las pruebas del instalador simulan las operaciones del sistema. **La instalación real ARM64 y las cámaras USB/CSI siguen pendientes de verificar en una Pi física.**
+
+## Alternativa: instalación manual
+
+Necesitas Raspberry Pi OS de **64 bits**, Python 3.11 o superior, conexión a la red del aula y acceso inicial por terminal/SSH. Comprueba:
 
 ```bash
 uname -m
@@ -53,6 +108,8 @@ export AULA_CAMERA_INDEX=0
 Mantén también `AULA_TOKEN` configurada. En la web carga `detector-objetos.zip` y pulsa «Iniciar cámara». La cámara utilizada es la del servidor, no la del navegador. Se solicita 640 × 480; la resolución final depende del dispositivo.
 
 «Detener cámara» la libera. Si se deja de pedir imagen, se cierra tras 30 segundos de inactividad. No se guardan fotos ni vídeo. La web pide un fotograma cada vez y limita el ritmo a unas cinco solicitudes por segundo como máximo; la Pi puede ser más lenta. Comprueba conexión, índice y permisos de vídeo si no se abre.
+
+La vista en directo muestra los recuadros, etiquetas y puntuaciones sobre la imagen. Su panel indica FPS reales de los fotogramas procesados recibidos, objetos en el fotograma, desglose por etiqueta, resolución, fotogramas analizados y tiempos del modelo, procesamiento completo y ciclo con red. Los recuentos no representan objetos únicos a lo largo del vídeo; el mismo objeto puede aparecer en muchos fotogramas. No se calcula precisión real sin anotaciones de referencia.
 
 ## Cámara CSI por cinta
 
