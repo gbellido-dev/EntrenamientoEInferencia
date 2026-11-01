@@ -2,7 +2,7 @@
 
 Entorno: Windows, Python 3.12.14. Las versiones instaladas están registradas en `requirements-windows.lock.txt`.
 
-La batería de **18 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas y el instalador de Raspberry Pi. Se han retirado las versiones anteriores y sus dependencias internas.
+La batería de **19 pruebas ha pasado**, incluida la creación de proyectos vacíos sin etiquetas, la selección de fotos desde el área vacía y el instalador de Raspberry Pi. Se han retirado las versiones anteriores y sus dependencias internas.
 
 ## Comprobaciones
 

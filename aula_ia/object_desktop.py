@@ -369,6 +369,8 @@ class BoxCanvas(QWidget):
     """Widget interactivo para dibujar y visualizar bounding boxes."""
 
     changed = Signal(object)
+    image_requested = Signal()
+    files_dropped = Signal(object)
 
     def __init__(self, editable=True):
         super().__init__()
@@ -400,7 +402,9 @@ class BoxCanvas(QWidget):
         return self._label_color_cache[label]
 
     def _update_cursor(self):
-        if self.editable and self.current_label:
+        if self.pixmap is None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        elif self.editable and self.current_label:
             self.setCursor(Qt.CursorShape.CrossCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -422,6 +426,7 @@ class BoxCanvas(QWidget):
         self.box_labels = list(labels) if labels is not None else [self.current_label] * len(boxes)
         self.selected = -1
         self.start = self.end = None
+        self._update_cursor()
         self.update()
 
     def display_rect(self) -> QRectF:
@@ -532,17 +537,21 @@ class BoxCanvas(QWidget):
         painter.drawLine(cx, cy - 16, cx, cy + 16)
         painter.drawLine(cx - 16, cy, cx + 16, cy)
         # Texto
-        painter.setPen(QColor('#4b5563'))
+        painter.setPen(QColor('#94a3b8'))
         painter.setFont(QFont('Segoe UI', 11))
         painter.drawText(
             self.rect().adjusted(0, side // 2 + 20, 0, 0),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-            'Arrastra una imagen o selecciona una foto',
+            'Haz clic para seleccionar una foto o arrástrala aquí',
         )
 
     # ── eventos de ratón ─────────────────────────────────────
 
     def mousePressEvent(self, event):
+        if self.pixmap is None and event.button() == Qt.MouseButton.LeftButton:
+            self.image_requested.emit()
+            event.accept()
+            return
         if (not self.editable or not self.current_label or
                 self.pixmap is None or event.button() != Qt.MouseButton.LeftButton):
             return
@@ -589,17 +598,16 @@ class BoxCanvas(QWidget):
     # ── drag & drop ──────────────────────────────────────────
 
     def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
+        if any(url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in EXTENSIONS
+               for url in event.mimeData().urls()):
             event.acceptProposedAction()
 
     def dropEvent(self, event):
-        urls = event.mimeData().urls()
-        if urls:
-            path = urls[0].toLocalFile()
-            self.dropped_image.emit(path) if hasattr(self, 'dropped_image') else None
-            # La ventana padre escucha 'canvas_drop' a través del atributo inyectado
-            if hasattr(self, '_drop_handler'):
-                self._drop_handler(path)
+        paths = [url.toLocalFile() for url in event.mimeData().urls()
+                 if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in EXTENSIONS]
+        if paths:
+            self.files_dropped.emit(paths)
+            event.acceptProposedAction()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -814,7 +822,8 @@ class ObjectWindow(QMainWindow):
         # Canvas principal
         self.canvas = BoxCanvas(editable=True)
         self.canvas.changed.connect(self.update_boxes)
-        self.canvas._drop_handler = self._canvas_drop
+        self.canvas.image_requested.connect(self.select_photos)
+        self.canvas.files_dropped.connect(self.import_photos)
         detail.addWidget(self.canvas, 1)
 
         # Fila de info de archivo y partición rápida
@@ -887,31 +896,55 @@ class ObjectWindow(QMainWindow):
     def canvas_relabel(self):
         self.canvas.relabel_selected()
 
-    def _canvas_drop(self, path: str):
-        """Maneja imagen soltada sobre el canvas."""
-        if not self.project:
-            self.error('Crea o abre un proyecto antes de soltar imágenes.')
-            return
-        suffix = Path(path).suffix.lower()
-        if suffix not in EXTENSIONS:
-            return
-        digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-        known = {row['sha256'] for row in self.project['images']}
-        if digest not in known:
-            self.project['images'].append({
-                'path': str(Path(path).resolve()),
-                'sha256': digest,
-                'group': 'drop',
-                'boxes': [], 'box_labels': [],
-                'reviewed': False, 'excluded': False,
-            })
+    def select_photos(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, 'Seleccionar fotografías', '', 'Imágenes (*.jpg *.jpeg *.png *.webp *.bmp)'
+        )
+        if paths:
+            self.import_photos(paths)
+
+    def import_photos(self, paths):
+        """Importar solo los archivos elegidos, sin recorrer sus carpetas."""
+        try:
+            prepared = []
+            for value in paths:
+                path = Path(value).resolve()
+                if path.suffix.lower() not in EXTENSIONS or not path.is_file():
+                    raise ValueError(f'No es una fotografía compatible: {path.name}')
+                with Image.open(path) as image:
+                    image.verify()
+                prepared.append((path, hashlib.sha256(path.read_bytes()).hexdigest()))
+            if not prepared:
+                return
+            if not self.project:
+                self.new_project()
+                if not self.project:
+                    return
+            group = f'{self._current_partition}-drop' if self._current_partition in ('train', 'val', 'test') else 'drop'
+            known = {row['sha256'] for row in self.project['images']}
+            added = 0
+            for path, digest in prepared:
+                if digest not in known:
+                    self.project['images'].append({
+                        'path': str(path), 'sha256': digest, 'group': group,
+                        'boxes': [], 'box_labels': [], 'reviewed': False, 'excluded': False,
+                    })
+                    known.add(digest)
+                    added += 1
             self.save()
             self.refresh()
-        # Seleccionar la imagen recién añadida o ya existente
-        for i, row in enumerate(self.project['images']):
-            if row['sha256'] == digest:
-                self.images.setCurrentRow(i)
-                break
+            first_digest = prepared[0][1]
+            for index, row in enumerate(self.project['images']):
+                if row['sha256'] == first_digest:
+                    if self._current_partition != 'all' and self._detect_partition(row['group']) != self._current_partition:
+                        self.partition_tabs.setCurrentIndex(0)
+                    self.images.setCurrentRow(index)
+                    if self.current != index:
+                        self.select(index)
+                    break
+            self.statusBar().showMessage(f'{added} fotos añadidas; la fotografía seleccionada está lista para anotar.', 4000)
+        except Exception as error:
+            self.error(f'No se pudieron cargar las fotografías: {error}')
 
     # ─────────────────────────────────────────────────────────
     # 4b. Tab 2 — Entrenar
@@ -1099,6 +1132,8 @@ class ObjectWindow(QMainWindow):
 
         # ── Panel derecho (canvas) ──
         self.test_canvas = BoxCanvas(editable=False)
+        self.test_canvas.image_requested.connect(self.test_image)
+        self.test_canvas.files_dropped.connect(lambda paths: self.test_image_path(paths[0]))
         page_layout.addWidget(self.test_canvas, 1)
 
         self.tabs.addTab(page, '3 · Prueba el detector')
@@ -1656,6 +1691,11 @@ class ObjectWindow(QMainWindow):
         )
         if not path:
             return
+        self.test_image_path(path)
+
+    def test_image_path(self, path):
+        if not self.package:
+            return self.error('Abre o entrena primero un detector.')
         package, threshold = self.package, self.threshold.value()
 
         def ready(result):

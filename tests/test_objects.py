@@ -70,6 +70,60 @@ class FakeCamera:
 
 
 class ObjectTests(unittest.TestCase):
+    def test_empty_canvas_click_selects_photos_and_drop_imports_one_file(self):
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtTest import QTest
+        from PySide6.QtCore import Qt, QPoint, QPointF, QMimeData, QUrl
+        from PySide6.QtGui import QDragEnterEvent, QDropEvent
+        from aula_ia.object_desktop import ObjectWindow
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            first, second = folder/'primera.png', folder/'segunda.png'
+            Image.new('RGB', (100, 80), 'red').save(first)
+            Image.new('RGB', (100, 80), 'blue').save(second)
+            project_path = folder/'proyecto.json'
+            window = ObjectWindow()
+            window.show()
+            app.processEvents()
+            with patch('aula_ia.object_desktop.QFileDialog.getOpenFileNames', return_value=([str(first)], '')) as picker, \
+                    patch('aula_ia.object_desktop.QFileDialog.getSaveFileName', return_value=(str(project_path), '')):
+                QTest.mouseClick(window.canvas, Qt.MouseButton.LeftButton, pos=window.canvas.rect().center())
+                picker.assert_called_once()
+            self.assertEqual(len(window.project['images']), 1)
+            self.assertEqual(window.project['images'][window.current]['path'], str(first.resolve()))
+            self.assertIsNotNone(window.canvas.pixmap)
+            self.assertEqual(window.project['classes'], [])
+            window.project['classes'] = ['Objeto']
+            row = window.project['images'][0]
+            row.update(boxes=[[10, 10, 40, 40]], box_labels=['Objeto'], reviewed=True)
+            window.save()
+            window.import_photos([str(first)])
+            self.assertEqual(len(window.project['images']), 1)
+            self.assertEqual(window.project['images'][0]['boxes'], [[10, 10, 40, 40]])
+            window.partition_tabs.setCurrentIndex(1)
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(str(second))])
+            enter = QDragEnterEvent(QPoint(20, 20), Qt.DropAction.CopyAction, mime,
+                                   Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            app.sendEvent(window.canvas, enter)
+            self.assertTrue(enter.isAccepted())
+            drop = QDropEvent(QPointF(20, 20), Qt.DropAction.CopyAction, mime,
+                             Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            app.sendEvent(window.canvas, drop)
+            self.assertTrue(drop.isAccepted())
+            self.assertEqual(len(window.project['images']), 2)
+            self.assertEqual(window.project['images'][window.current]['path'], str(second.resolve()))
+            self.assertTrue(window.project['images'][window.current]['group'].startswith('train-'))
+            saved = json.loads(project_path.read_text(encoding='utf-8'))
+            self.assertEqual(len(saved['images']), 2)
+            window.import_photos([str(first)])
+            self.assertEqual(window.partition_tabs.currentIndex(), 0)
+            self.assertEqual(window.project['images'][window.current]['path'], str(first.resolve()))
+            window.close()
+        app.processEvents()
+
     def test_new_project_has_no_labels_and_can_reopen(self):
         os.environ['QT_QPA_PLATFORM'] = 'offscreen'
         from PySide6.QtWidgets import QApplication
