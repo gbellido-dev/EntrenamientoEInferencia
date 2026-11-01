@@ -1,13 +1,411 @@
-<!doctype html>
-<html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aula IA · Inferencia</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-<body><main>
-<header><span class="eyebrow">LABORATORIO · RASPBERRY PI 4</span><h1>De ejemplos a predicciones.</h1><p>Has enseñado al modelo en Windows. Ahora ponlo a prueba con una imagen nueva.</p><span id="status" role="status">Conectando…</span></header>
-<section><h2>1. Conecta con tu laboratorio</h2><label for="token">Clave del aula</label><input id="token" type="password" autocomplete="off" placeholder="La facilita tu profesor"><p class="hint">La clave se conserva solo en esta página mientras esté abierta.</p></section>
-<div class="columns"><section><span class="step">EL MODELO</span><h2>2. Carga lo aprendido</h2><p>Selecciona <strong>detector-objetos.zip</strong>, exportado desde Windows con tus etiquetas.</p><label for="model">Paquete del modelo · máximo 64 MiB</label><input id="model" type="file" accept=".zip"><button id="load">Cargar modelo</button><div id="model-info" aria-live="polite">Todavía no hay un modelo activo.</div></section>
-<section><span class="step">LA PRUEBA</span><h2>3. Presenta una imagen nueva</h2><label for="image">Fotografía · máximo 10 MiB</label><input id="image" type="file" accept="image/jpeg,image/png,image/webp,image/bmp"><img id="preview" alt="Imagen de prueba y rectángulos detectados" hidden><label for="threshold">Umbral de puntuación</label><input id="threshold" type="number" min="0.01" max="1" step="0.05" value="0.5"><button id="predict">Analizar imagen</button></section></div>
-<section><span class="step">CÁMARA DE LA RASPBERRY PI</span><h2>4. Cámara y detecciones en directo</h2><p>La cámara debe estar conectada a la Raspberry Pi. Verás los recuadros, sus etiquetas y puntuaciones sobre la imagen, junto a las estadísticas de cada fotograma.</p><div class="camera-actions"><button id="camera-start" disabled>Iniciar cámara</button><button id="camera-stop" disabled>Detener cámara</button></div><p id="camera-status" role="status">Carga un paquete de detección para utilizar esta función.</p><div id="camera-live" class="camera-live" hidden><div><img id="camera-preview" alt="Vídeo de la cámara con recuadros, etiquetas y puntuaciones" hidden><p class="hint">Se muestran fotogramas procesados consecutivos. La velocidad depende del modelo, la Pi y la red.</p></div><aside aria-label="Estadísticas de detección"><h3>En este fotograma</h3><dl class="camera-metrics"><div><dt>Objetos</dt><dd id="stat-objects">0</dd></div><div><dt>FPS reales</dt><dd id="stat-fps">—</dd></div><div><dt>Modelo y salida</dt><dd id="stat-inference">—</dd></div><div><dt>Procesamiento total</dt><dd id="stat-frame">—</dd></div><div><dt>Ciclo con red</dt><dd id="stat-network">—</dd></div><div><dt>Fotogramas analizados</dt><dd id="stat-frames">0</dd></div><div><dt>Resolución</dt><dd id="stat-resolution">—</dd></div></dl><h3>Objetos por etiqueta</h3><ul id="camera-counts" class="camera-counts"></ul><p class="hint">Los recuentos son del fotograma actual. No cuentan objetos únicos a lo largo del vídeo.</p></aside></div></section>
-<section id="results" hidden aria-live="polite"><h2 id="prediction"></h2><p id="timing"></p><div id="scores"></div><p class="hint">Una puntuación alta no garantiza un acierto. El detector puede omitir objetos o confundir sus clases; prueba distintas distancias, iluminación y fondos.</p></section>
-<p id="message" role="alert"></p><footer><strong>Piensa como investigador.</strong> Cambia el fondo, la iluminación o el objeto. ¿Mantiene su respuesta? La inferencia se ejecuta en la Raspberry Pi; el navegador muestra el resultado.</footer>
-</main></body></html>
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aula IA · Inferencia</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
 
+  <!-- ═══════════════════════════════════════════════════════════ SIDEBAR -->
+  <nav class="sidebar" id="sidebar" aria-label="Navegación principal">
+    <div class="sidebar-brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+          <rect width="32" height="32" rx="8" fill="var(--accent)"/>
+          <circle cx="16" cy="16" r="7" stroke="white" stroke-width="2.2"/>
+          <circle cx="16" cy="16" r="3" fill="white"/>
+          <line x1="16" y1="4" x2="16" y2="9" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <line x1="16" y1="23" x2="16" y2="28" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <line x1="4" y1="16" x2="9" y2="16" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <line x1="23" y1="16" x2="28" y2="16" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="brand-text">Aula IA</span>
+    </div>
+
+    <ul class="sidebar-nav" role="tablist">
+      <li>
+        <button class="nav-item active" role="tab" aria-selected="true" data-panel="panel-connect" aria-controls="panel-connect">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Conexión</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" role="tab" aria-selected="false" data-panel="panel-model" aria-controls="panel-model">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          <span>Modelo</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" role="tab" aria-selected="false" data-panel="panel-predict" aria-controls="panel-predict">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+          <span>Análisis</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" role="tab" aria-selected="false" data-panel="panel-camera" aria-controls="panel-camera">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <span>Cámara</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" role="tab" aria-selected="false" data-panel="panel-history" aria-controls="panel-history">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Historial</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <div class="connection-badge" id="connection-badge" role="status" aria-live="polite">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-label">Conectando…</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════ MAIN -->
+  <div class="app-layout">
+
+    <!-- HEADER -->
+    <header class="app-header" role="banner">
+      <button class="menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="header-title">
+        <span class="header-eyebrow">LABORATORIO · RASPBERRY PI</span>
+        <h1 class="header-h1">De ejemplos a predicciones</h1>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" title="Cambiar tema claro/oscuro">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT AREA -->
+    <main class="app-content" role="main">
+
+      <!-- ─── PANEL: CONEXIÓN ─────────────────────────────── -->
+      <section class="panel active" id="panel-connect" role="tabpanel" aria-label="Conexión">
+        <div class="panel-header">
+          <h2 class="panel-title">1. Conecta con tu laboratorio</h2>
+          <p class="panel-desc">Introduce la clave del aula para comunicarte con la Raspberry Pi. La clave se conserva solo mientras la página está abierta.</p>
+        </div>
+        <div class="card">
+          <label class="field-label" for="token">Clave del aula</label>
+          <input class="field-input" id="token" type="password" autocomplete="off" placeholder="La facilita tu profesor" spellcheck="false">
+          <p class="field-hint">La clave no se almacena ni se envía a ningún servidor externo.</p>
+          <div class="model-status-card" id="model-info-card">
+            <div class="model-status-icon" id="model-status-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            </div>
+            <div>
+              <div class="model-status-title" id="model-info-title">Sin modelo activo</div>
+              <div class="model-status-labels" id="model-info" aria-live="polite">Todavía no hay un modelo cargado.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── PANEL: MODELO ──────────────────────────────── -->
+      <section class="panel" id="panel-model" role="tabpanel" aria-label="Modelo" hidden>
+        <div class="panel-header">
+          <h2 class="panel-title">2. Carga lo aprendido</h2>
+          <p class="panel-desc">Selecciona <strong>detector-objetos.zip</strong>, exportado desde Windows con tus etiquetas. Máximo 64 MiB.</p>
+        </div>
+        <div class="card">
+          <!-- Drop zone -->
+          <div class="drop-zone" id="model-drop-zone" tabindex="0" role="button" aria-label="Zona de arrastre para el modelo ZIP">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p class="drop-zone-text">Arrastra el ZIP aquí o <span class="drop-zone-link">haz clic para seleccionar</span></p>
+            <p class="drop-zone-hint">Formato: .zip · Máx 64 MiB</p>
+            <input id="model" type="file" accept=".zip" class="file-hidden" aria-label="Seleccionar archivo de modelo">
+          </div>
+          <div class="file-selected" id="model-file-name" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span id="model-file-label">—</span>
+          </div>
+          <button class="btn btn-primary" id="load">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Cargar modelo
+          </button>
+          <!-- Skeleton loader -->
+          <div class="skeleton-block" id="model-skeleton" hidden>
+            <div class="skeleton-line" style="width:60%"></div>
+            <div class="skeleton-line" style="width:85%"></div>
+            <div class="skeleton-line" style="width:40%"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── PANEL: ANÁLISIS ────────────────────────────── -->
+      <section class="panel" id="panel-predict" role="tabpanel" aria-label="Análisis de imagen" hidden>
+        <div class="panel-header">
+          <h2 class="panel-title">3. Analiza una imagen nueva</h2>
+          <p class="panel-desc">Sube una fotografía y el modelo detectará los objetos que reconozca. Ajusta el umbral para filtrar detecciones poco seguras.</p>
+        </div>
+
+        <div class="predict-layout">
+          <!-- Columna izquierda: imagen -->
+          <div class="predict-image-col">
+            <div class="card">
+              <div class="drop-zone" id="image-drop-zone" tabindex="0" role="button" aria-label="Zona de arrastre para imagen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <p class="drop-zone-text">Arrastra la imagen aquí o <span class="drop-zone-link">haz clic para seleccionar</span></p>
+                <p class="drop-zone-hint">JPEG · PNG · WebP · BMP · Máx 10 MiB</p>
+                <input id="image" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" class="file-hidden" aria-label="Seleccionar imagen">
+              </div>
+
+              <!-- Canvas de previsualización -->
+              <div class="canvas-wrapper" id="canvas-wrapper" hidden>
+                <canvas id="preview-canvas" aria-label="Imagen de prueba con bounding boxes"></canvas>
+                <div class="canvas-controls">
+                  <button class="icon-btn-sm" id="zoom-in-btn" title="Acercar" aria-label="Acercar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <button class="icon-btn-sm" id="zoom-out-btn" title="Alejar" aria-label="Alejar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <button class="icon-btn-sm" id="zoom-reset-btn" title="Restablecer zoom" aria-label="Restablecer zoom">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  </button>
+                  <button class="icon-btn-sm" id="export-canvas-btn" title="Descargar imagen anotada" aria-label="Descargar imagen anotada" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Controls de predict -->
+              <div class="predict-controls">
+                <div class="slider-group">
+                  <label class="field-label" for="threshold">
+                    Umbral de confianza
+                    <span class="threshold-value" id="threshold-display">0.50</span>
+                  </label>
+                  <input class="slider" id="threshold" type="range" min="0.01" max="1" step="0.01" value="0.50">
+                  <div class="slider-marks">
+                    <span>0.01</span>
+                    <span>0.25</span>
+                    <span>0.50</span>
+                    <span>0.75</span>
+                    <span>1.00</span>
+                  </div>
+                </div>
+                <div class="predict-buttons">
+                  <button class="btn btn-primary" id="predict">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Analizar imagen
+                  </button>
+                  <button class="btn btn-secondary" id="reanalyze" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    Re-analizar
+                  </button>
+                  <button class="btn btn-ghost" id="export-json-btn" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Exportar JSON
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna derecha: resultados -->
+          <div class="predict-results-col">
+            <!-- Skeleton -->
+            <div class="skeleton-panel" id="predict-skeleton" hidden>
+              <div class="skeleton-line" style="width:50%"></div>
+              <div class="skeleton-line" style="width:80%"></div>
+              <div class="skeleton-line" style="width:65%"></div>
+              <div class="skeleton-line" style="width:90%"></div>
+            </div>
+
+            <section id="results" class="results-panel" hidden aria-live="polite">
+              <!-- Resumen -->
+              <div class="results-summary">
+                <div class="summary-stat">
+                  <span class="summary-num" id="stat-total">0</span>
+                  <span class="summary-label">Objetos</span>
+                </div>
+                <div class="summary-stat">
+                  <span class="summary-num" id="stat-top-class">—</span>
+                  <span class="summary-label">Clase más frecuente</span>
+                </div>
+                <div class="summary-stat">
+                  <span class="summary-num" id="stat-avg-conf">—</span>
+                  <span class="summary-label">Confianza media</span>
+                </div>
+              </div>
+              <p class="timing-line" id="timing"></p>
+              <div id="scores" class="detection-cards"></div>
+              <p class="field-hint">Una puntuación alta no garantiza un acierto. Prueba distintas distancias, iluminación y fondos.</p>
+            </section>
+
+            <!-- Placeholder cuando no hay resultados -->
+            <div class="results-placeholder" id="results-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="48" height="48" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <p>Sube una imagen y pulsa «Analizar imagen» para ver las detecciones.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── PANEL: CÁMARA ──────────────────────────────── -->
+      <section class="panel" id="panel-camera" role="tabpanel" aria-label="Cámara en directo" hidden>
+        <div class="panel-header">
+          <h2 class="panel-title">4. Cámara y detecciones en directo</h2>
+          <p class="panel-desc">La cámara debe estar conectada a la Raspberry Pi. Verás los recuadros, etiquetas y puntuaciones sobre la imagen.</p>
+        </div>
+
+        <!-- Controles de cámara -->
+        <div class="camera-toolbar">
+          <div class="camera-toolbar-left">
+            <button class="btn btn-primary" id="camera-start" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Iniciar cámara
+            </button>
+            <button class="btn btn-danger" id="camera-stop" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="6" y="6" width="12" height="12"/></svg>
+              Detener cámara
+            </button>
+            <button class="btn btn-ghost" id="camera-screenshot" disabled hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Captura
+            </button>
+          </div>
+          <div class="camera-toolbar-right">
+            <label class="field-label-inline" for="camera-resolution">Resolución</label>
+            <select class="select-input" id="camera-resolution" aria-label="Resolución de inferencia">
+              <option value="320">320 × 240</option>
+              <option value="640" selected>640 × 480</option>
+              <option value="1280">1280 × 720</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="camera-status-line" id="camera-status" role="status" aria-live="polite">Carga un paquete de detección para utilizar esta función.</p>
+
+        <div class="camera-live" id="camera-live" hidden>
+          <!-- Imagen con overlay -->
+          <div class="camera-image-wrap">
+            <img id="camera-preview" alt="Vídeo de la cámara con recuadros, etiquetas y puntuaciones" hidden>
+            <!-- Overlay de estadísticas sobre la imagen -->
+            <div class="camera-overlay" id="camera-overlay" hidden>
+              <div class="overlay-pill">
+                <span class="overlay-label">FPS</span>
+                <span class="overlay-val" id="overlay-fps">—</span>
+              </div>
+              <div class="overlay-pill">
+                <span class="overlay-label">Objetos</span>
+                <span class="overlay-val" id="overlay-objects">0</span>
+              </div>
+              <div class="overlay-pill">
+                <span class="overlay-label">Inferencia</span>
+                <span class="overlay-val" id="overlay-inference">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel lateral de estadísticas -->
+          <aside class="camera-stats-panel" aria-label="Estadísticas de detección">
+            <h3 class="stats-panel-title">Fotograma actual</h3>
+            <dl class="camera-metrics">
+              <div class="metric-item">
+                <dt>Objetos</dt>
+                <dd id="stat-objects">0</dd>
+              </div>
+              <div class="metric-item">
+                <dt>FPS reales</dt>
+                <dd id="stat-fps">—</dd>
+              </div>
+              <div class="metric-item">
+                <dt>Inferencia</dt>
+                <dd id="stat-inference">—</dd>
+              </div>
+              <div class="metric-item">
+                <dt>Frame total</dt>
+                <dd id="stat-frame">—</dd>
+              </div>
+              <div class="metric-item">
+                <dt>Ciclo con red</dt>
+                <dd id="stat-network">—</dd>
+              </div>
+              <div class="metric-item">
+                <dt>Fotogramas</dt>
+                <dd id="stat-frames">0</dd>
+              </div>
+              <div class="metric-item">
+                <dt>Resolución</dt>
+                <dd id="stat-resolution">—</dd>
+              </div>
+            </dl>
+            <h3 class="stats-panel-title">Objetos por etiqueta</h3>
+            <ul id="camera-counts" class="camera-counts"></ul>
+            <p class="field-hint">Recuentos del fotograma actual. No cuentan objetos únicos a lo largo del vídeo.</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ─── PANEL: HISTORIAL ───────────────────────────── -->
+      <section class="panel" id="panel-history" role="tabpanel" aria-label="Historial de sesión" hidden>
+        <div class="panel-header">
+          <h2 class="panel-title">Historial de sesión</h2>
+          <p class="panel-desc">Últimas 5 imágenes analizadas durante esta sesión, con la miniatura y el recuento de objetos detectados.</p>
+        </div>
+        <div class="card">
+          <div class="history-actions">
+            <button class="btn btn-ghost btn-sm" id="clear-history-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              Limpiar historial
+            </button>
+          </div>
+          <div id="history-grid" class="history-grid">
+            <div class="history-empty" id="history-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="40" height="40" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <p>No hay imágenes en el historial. Analiza una imagen para empezar.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer" role="contentinfo">
+      <strong>Piensa como investigador.</strong> Cambia el fondo, la iluminación o el objeto. ¿Mantiene su respuesta? La inferencia se ejecuta en la Raspberry Pi; el navegador muestra el resultado.
+    </footer>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ TOAST CONTAINER -->
+  <div class="toast-container" id="toast-container" aria-live="assertive" aria-atomic="true"></div>
+
+  <!-- ═══════════════════════════════════════════════════ MOBILE NAV -->
+  <nav class="mobile-nav" aria-label="Navegación móvil">
+    <button class="mobile-nav-item active" data-panel="panel-connect" aria-label="Conexión">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>Conexión</span>
+    </button>
+    <button class="mobile-nav-item" data-panel="panel-model" aria-label="Modelo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+      <span>Modelo</span>
+    </button>
+    <button class="mobile-nav-item" data-panel="panel-predict" aria-label="Análisis">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+      <span>Análisis</span>
+    </button>
+    <button class="mobile-nav-item" data-panel="panel-camera" aria-label="Cámara">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      <span>Cámara</span>
+    </button>
+    <button class="mobile-nav-item" data-panel="panel-history" aria-label="Historial">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historial</span>
+    </button>
+  </nav>
+
+</body>
+</html>

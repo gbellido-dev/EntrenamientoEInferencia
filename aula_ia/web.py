@@ -162,7 +162,15 @@ def create_app(data_dir=None, token=None, camera=None):
         return {'active': False}
 
     @app.post('/api/camera/frame')
-    def camera_frame(threshold: float = .5, x_aula_token: str = Header(default='')):
+    def camera_frame(threshold: float = .5, resolution: str = '',
+                     x_aula_token: str = Header(default='')):
+        """Devuelve un fotograma anotado.
+
+        Parámetro opcional ``resolution``: '320', '640' o '1280'.
+        Si se indica, el fotograma se redimensiona a esa anchura para
+        la inferencia, pero la imagen anotada devuelta mantiene el
+        tamaño original capturado por la cámara.
+        """
         authorize(x_aula_token)
         if not lock.acquire(blocking=False):
             raise HTTPException(409, 'El servidor está ocupado; vuelve a intentarlo.')
@@ -172,9 +180,30 @@ def create_app(data_dir=None, token=None, camera=None):
                 raise HTTPException(409, 'Carga un detector de objetos.')
             try:
                 started = time.perf_counter()
-                image = camera.frame()
+                image = camera.frame()          # imagen original (tamaño completo)
                 captured = time.perf_counter()
-                result = predictor.predict(image, threshold)
+
+                # Redimensionar solo para inferencia si se solicita
+                infer_image = image
+                if resolution in ('320', '640', '1280'):
+                    target_w = int(resolution)
+                    if image.width != target_w:
+                        ratio = target_w / image.width
+                        target_h = max(1, round(image.height * ratio))
+                        resample = getattr(Image, 'Resampling', Image).BILINEAR
+                        infer_image = image.resize((target_w, target_h), resample)
+
+                result = predictor.predict(infer_image, threshold)
+
+                # Escalar las bounding boxes de vuelta al tamaño original si se redimensionó
+                if infer_image is not image:
+                    sx = image.width / infer_image.width
+                    sy = image.height / infer_image.height
+                    for det in result['detections']:
+                        x1, y1, x2, y2 = det['box']
+                        det['box'] = [x1 * sx, y1 * sy, x2 * sx, y2 * sy]
+
+                # Anotar sobre la imagen original (tamaño completo)
                 buffer = io.BytesIO()
                 annotated_image(image, result['detections']).save(buffer, format='JPEG', quality=80)
                 counts = Counter(item['class_id'] for item in result['detections'])
@@ -183,10 +212,12 @@ def create_app(data_dir=None, token=None, camera=None):
                     'X-Object-Counts': json.dumps(counts, separators=(',', ':')),
                     'X-Inference-Ms': str(result['inference_ms']),
                     'X-Processing-Ms': str(result['processing_ms']),
-                    'X-Capture-Ms': str(round((captured-started)*1000, 2)),
-                    'X-Frame-Ms': str(round((time.perf_counter()-started)*1000, 2)),
-                    'X-Frame-Width': str(image.width), 'X-Frame-Height': str(image.height),
-                    'X-Model-Id': predictor.model_id})
+                    'X-Capture-Ms': str(round((captured - started) * 1000, 2)),
+                    'X-Frame-Ms': str(round((time.perf_counter() - started) * 1000, 2)),
+                    'X-Frame-Width': str(image.width),
+                    'X-Frame-Height': str(image.height),
+                    'X-Model-Id': predictor.model_id,
+                })
             except Exception as error:
                 raise HTTPException(400, str(error)[:350]) from error
         finally:
